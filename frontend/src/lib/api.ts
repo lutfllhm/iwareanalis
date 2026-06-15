@@ -74,7 +74,7 @@ api.interceptors.response.use(
       try {
         // Request token refresh
         const res = await axios.post(
-          'http://localhost:5000/api/auth/refresh',
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5010/api'}/auth/refresh`,
           {},
           { withCredentials: true }
         );

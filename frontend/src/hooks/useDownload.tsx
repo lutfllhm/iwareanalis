@@ -34,7 +34,7 @@ export function useDownload(moduleKey: string, endpoint: string, filename: strin
     setDownloadError(null);
     try {
       const token = localStorage.getItem('accessToken');
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5010/api';
       const response = await fetch(`${baseUrl}${endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

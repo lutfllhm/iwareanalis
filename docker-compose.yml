@@ -67,12 +67,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://iwanalys.iwareid.com/api
     container_name: dataanalis_frontend
     restart: always
     ports:
       - "3010:3000"
     environment:
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://iwanalys.iwareid.com/api
     depends_on:
       - backend
     networks:

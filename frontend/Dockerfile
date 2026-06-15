@@ -2,16 +2,14 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install packages
 RUN npm install
 
-# Copy code
 COPY . .
 
-# Build Next.js
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
 EXPOSE 3000
