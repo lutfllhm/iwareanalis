@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: dataanalis_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: dataanalis_root_password
+      MYSQL_DATABASE: dataanalis
+      MYSQL_USER: dataanalis_user
+      MYSQL_PASSWORD: dataanalis_password
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pdataanalis_root_password"]
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - dataanalis_net
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: dataanalis_phpmyadmin
+    restart: always
+    environment:
+      PMA_HOST: db
+      MYSQL_ROOT_PASSWORD: dataanalis_root_password
+    ports:
+      - "8091:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dataanalis_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dataanalis_backend
+    restart: always
+    ports:
+      - "5010:5010"
+    environment:
+      - PORT=5010
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://dataanalis_user:dataanalis_password@db:3306/dataanalis
+      - JWT_ACCESS_SECRET=dataanalis_access_secret_key_change_me_in_production_9988
+      - JWT_REFRESH_SECRET=dataanalis_refresh_secret_key_change_me_in_production_7766
+      - ENCRYPTION_KEY=e9ca72b146473e659357a7dbd8bc4b6845cb067756f7efb0f443b71c4c16a8b1
+      - ACCURATE_MOCK=true
+      - ACCURATE_CLIENT_ID=your_client_id
+      - ACCURATE_CLIENT_SECRET=your_client_secret
+      - ACCURATE_REDIRECT_URI=http://localhost:3010/settings
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - dataanalis_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dataanalis_frontend
+    restart: always
+    ports:
+      - "3010:3000"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - dataanalis_net
+
+volumes:
+  mysql_data:
+
+networks:
+  dataanalis_net:
+    driver: bridge
