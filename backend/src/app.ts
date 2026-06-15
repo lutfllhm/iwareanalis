@@ -9,6 +9,9 @@ import { startSyncScheduler } from './services/syncScheduler';
 
 const app = express();
 
+// Trust Nginx reverse proxy
+app.set('trust proxy', 1);
+
 // 1. Security Headers (Helmet.js)
 app.use(helmet());
 
