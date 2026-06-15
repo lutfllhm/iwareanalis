@@ -54,7 +54,7 @@ export class AccurateService {
     const clientId = config.accurate.clientId || 'your_client_id';
     const redirectUri = encodeURIComponent(config.accurate.redirectUri);
     // Standard Accurate authorization scopes
-    const scope = encodeURIComponent('item_read customer_read sales_invoice_read sales_return_read');
+    const scope = encodeURIComponent('item_read sales_invoice_read sales_return_read');
     return `https://account.accurate.id/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}`;
   }
 

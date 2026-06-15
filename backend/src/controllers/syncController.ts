@@ -198,41 +198,30 @@ export async function getAccurateAuthUrl(_req: AuthenticatedRequest, res: Respon
  * Handle Accurate OAuth2 Callback
  */
 export async function handleOauthCallback(req: AuthenticatedRequest, res: Response) {
-  const { code } = req.body;
+  // Accurate redirects browser via GET with code in query string
+  const code = req.query.code as string;
+  const error = req.query.error as string;
+
+  const frontendUrl = process.env.FRONTEND_URL || 'https://iwanalys.iwareid.com';
+
+  if (error) {
+    logger.error(`Accurate OAuth error: ${error} - ${req.query.error_description}`);
+    return res.redirect(`${frontendUrl}/settings?accurate_error=${encodeURIComponent(error)}`);
+  }
 
   if (!code) {
-    return res.status(400).json({ message: 'Authorization code is missing' });
+    return res.redirect(`${frontendUrl}/settings?accurate_error=missing_code`);
   }
 
   try {
-    logger.info(`Received OAuth code from client, exchanging for tokens...`);
+    logger.info(`Received OAuth code from Accurate, exchanging for tokens...`);
     await AccurateService.exchangeCodeForToken(code);
 
-    // After success, fetch database list to return to UI so they can choose
-    const dbs = await AccurateService.getDatabaseList();
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        user_id: req.user?.id,
-        user_email: req.user?.email,
-        aksi: 'ACCURATE_CONNECTED',
-        target: 'Accurate API',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'] || '',
-      },
-    });
-
-    return res.status(200).json({
-      message: 'Koneksi Accurate Online berhasil',
-      databases: dbs,
-    });
-  } catch (error: any) {
-    logger.error('Accurate callback exchange failed:', error);
-    return res.status(500).json({ 
-      message: 'Gagal melakukan koneksi dengan Accurate Online',
-      error: error.message 
-    });
+    // Redirect back to settings page with success flag so frontend can fetch DB list
+    return res.redirect(`${frontendUrl}/settings?accurate_connected=true`);
+  } catch (err: any) {
+    logger.error('Accurate callback exchange failed:', err);
+    return res.redirect(`${frontendUrl}/settings?accurate_error=${encodeURIComponent(err.message)}`);
   }
 }
 

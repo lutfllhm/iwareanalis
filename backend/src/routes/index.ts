@@ -84,10 +84,8 @@ router.get(
   syncController.getAccurateAuthUrl as any
 );
 
-router.post(
+router.get(
   '/sync/callback',
-  authenticateToken as any,
-  requireRole(['admin', 'analyst']) as any,
   syncController.handleOauthCallback as any
 );
 
