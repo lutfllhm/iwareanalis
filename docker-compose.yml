@@ -11,7 +11,7 @@ services:
       MYSQL_USER: dataanalis_user
       MYSQL_PASSWORD: dataanalis_password
     ports:
-      - "3310:3306"
+      - "3320:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d
@@ -31,7 +31,7 @@ services:
       PMA_HOST: db
       MYSQL_ROOT_PASSWORD: dataanalis_root_password
     ports:
-      - "8091:80"
+      - "8094:80"
     depends_on:
       db:
         condition: service_healthy
