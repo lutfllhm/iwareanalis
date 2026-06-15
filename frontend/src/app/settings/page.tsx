@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
@@ -8,6 +9,7 @@ import { Settings, Shield, User, RefreshCw, CheckCircle, XCircle, Key, QrCode, D
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'accurate' | 'security' | 'download'>('accurate');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -65,6 +67,27 @@ export default function SettingsPage() {
       return res.data;
     },
   });
+
+  // Handle redirect back from Accurate OAuth callback
+  useEffect(() => {
+    const connected = searchParams.get('accurate_connected');
+    const error = searchParams.get('accurate_error');
+
+    if (connected === 'true') {
+      setToast({ type: 'success', msg: 'Berhasil terhubung ke Accurate! Memuat daftar database...' });
+      // Auto-load database list
+      api.get('/sync/databases').then((res) => {
+        setDatabasesList(res.data || []);
+      }).catch(() => {
+        setToast({ type: 'error', msg: 'Terhubung ke Accurate, tapi gagal memuat daftar database.' });
+      });
+      // Clean URL
+      window.history.replaceState({}, '', '/settings');
+    } else if (error) {
+      setToast({ type: 'error', msg: `Gagal terhubung ke Accurate: ${decodeURIComponent(error)}` });
+      window.history.replaceState({}, '', '/settings');
+    }
+  }, [searchParams]);
 
   // Load fetched settings values into react state variables
   useEffect(() => {

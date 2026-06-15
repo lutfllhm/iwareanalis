@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { AccurateService } from '../services/accurateService';
 import { startSyncScheduler } from '../services/syncScheduler';
+import { config } from '../config';
 import prisma from '../services/db';
 import logger from '../services/logger';
 
@@ -202,7 +203,7 @@ export async function handleOauthCallback(req: AuthenticatedRequest, res: Respon
   const code = req.query.code as string;
   const error = req.query.error as string;
 
-  const frontendUrl = process.env.FRONTEND_URL || 'https://iwanalys.iwareid.com';
+  const frontendUrl = config.frontendUrl;
 
   if (error) {
     logger.error(`Accurate OAuth error: ${error} - ${req.query.error_description}`);

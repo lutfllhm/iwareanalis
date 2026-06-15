@@ -16,6 +16,7 @@ export const config = {
   jwtAccessSecret: process.env.JWT_ACCESS_SECRET || 'dataanalis_access_secret_key_change_me_in_production_9988',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'dataanalis_refresh_secret_key_change_me_in_production_7766',
   encryptionKey: encryptionKey,
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   accurate: {
     mock: process.env.ACCURATE_MOCK === 'true',
     clientId: process.env.ACCURATE_CLIENT_ID || '',
