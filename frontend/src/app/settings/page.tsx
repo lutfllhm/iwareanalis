@@ -362,7 +362,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="bg-muted/30 p-3 rounded-xl text-xs text-muted-foreground">
-                <strong>Redirect URI resmi aplikasi:</strong> <code>http://localhost:3000/settings</code>
+                <strong>Redirect URI resmi aplikasi:</strong> <code>{`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5010'}/api/sync/callback`}</code>
               </div>
 
               <div className="flex items-center justify-between pt-2 border-t border-border/50">
