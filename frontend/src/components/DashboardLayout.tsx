@@ -38,7 +38,6 @@ const sidebarItems: SidebarItem[] = [
   { name: 'Faktur Penjualan', href: '/faktur-penjualan', icon: FileSpreadsheet },
   { name: 'Rincian Penjualan', href: '/rincian-penjualan', icon: FileSpreadsheet },
   { name: 'Retur Penjualan', href: '/retur-penjualan', icon: RefreshCw },
-  { name: 'Daftar Laporan', href: '/daftar-laporan/rincian-penjualan-per-barang', icon: BookOpen },
   { name: 'Laporan Data Analyst', href: '/laporan', icon: TrendingUp },
   { name: 'Manajemen User', href: '/users-management', icon: UserCheck, roles: ['admin'] },
   { name: 'Pengaturan', href: '/settings', icon: Settings },
