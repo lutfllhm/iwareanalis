@@ -1,84 +1,80 @@
 version: '3.8'
 
 services:
-  db:
+  # MySQL Database
+  dataanalis-db:
     image: mysql:8.0
-    container_name: dataanalis_mysql
-    restart: always
+    container_name: dataanalis-mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: dataanalis_root_password
-      MYSQL_DATABASE: dataanalis
-      MYSQL_USER: dataanalis_user
-      MYSQL_PASSWORD: dataanalis_password
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword123}
+      MYSQL_DATABASE: ${DB_NAME:-dataanalis}
+      MYSQL_USER: ${DB_USER:-dataanalis_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-dataanalis_pass}
     ports:
-      - "3320:3306"
+      - "3309:3306"
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database:/docker-entrypoint-initdb.d
+      - dataanalis-mysql-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/migration_add_transaksi_penjualan.sql:/docker-entrypoint-initdb.d/02-migration.sql
+    networks:
+      - dataanalis-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pdataanalis_root_password"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword123}"]
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
-    networks:
-      - dataanalis_net
 
-  phpmyadmin:
-    image: phpmyadmin:latest
-    container_name: dataanalis_phpmyadmin
-    restart: always
-    environment:
-      PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: dataanalis_root_password
-    ports:
-      - "8094:80"
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - dataanalis_net
-
-  backend:
+  # Backend API
+  dataanalis-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dataanalis_backend
-    restart: always
+    container_name: dataanalis-api
+    restart: unless-stopped
     ports:
-      - "5010:5010"
-    env_file:
-      - ./backend/.env
+      - "5010:5000"
     environment:
-      - PORT=5010
-      - DATABASE_URL=mysql://dataanalis_user:dataanalis_password@db:3306/dataanalis
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: mysql://${DB_USER:-dataanalis_user}:${DB_PASSWORD:-dataanalis_pass}@dataanalis-db:3306/${DB_NAME:-dataanalis}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ACCURATE_MOCK: ${ACCURATE_MOCK:-true}
+      ACCURATE_CLIENT_ID: ${ACCURATE_CLIENT_ID}
+      ACCURATE_CLIENT_SECRET: ${ACCURATE_CLIENT_SECRET}
+      ACCURATE_REDIRECT_URI: ${ACCURATE_REDIRECT_URI}
     depends_on:
-      db:
+      dataanalis-db:
         condition: service_healthy
     networks:
-      - dataanalis_net
+      - dataanalis-network
+    volumes:
+      - ./backend/logs:/app/logs
 
-  frontend:
+  # Frontend Next.js
+  dataanalis-frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://145.79.8.148:5010/api
-    container_name: dataanalis_frontend
-    restart: always
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5010/api}
+    container_name: dataanalis-web
+    restart: unless-stopped
     ports:
       - "3010:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://145.79.8.148:5010/api
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5010/api}
     depends_on:
-      - backend
+      - dataanalis-backend
     networks:
-      - dataanalis_net
-
+      - dataanalis-network
 
 volumes:
-  mysql_data:
+  dataanalis-mysql-data:
+    driver: local
 
 networks:
-  dataanalis_net:
+  dataanalis-network:
     driver: bridge

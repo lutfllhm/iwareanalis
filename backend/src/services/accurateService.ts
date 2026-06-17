@@ -268,6 +268,8 @@ export class AccurateService {
           syncCount = 2;
         } else if (moduleName === 'Rincian Penjualan Barang') {
           syncCount = 15;
+        } else if (moduleName === 'Transaksi Penjualan') {
+          syncCount = 20;
         } else if (moduleName === 'Mutasi Serial Number') {
           syncCount = 12;
         } else if (moduleName === 'Ringkasan Mutasi Stok') {
@@ -854,6 +856,77 @@ export class AccurateService {
     } catch (error: any) {
       logger.error('Failed to pull Rincian Penjualan per Barang:', error.response?.data || error.message);
       throw error;
+    }
+  }
+
+  /**
+   * Pull Daftar Faktur Penjualan dari Accurate Report API
+   * Endpoint: GET /api/report/sales-invoice-list.do (Scope: report_view)
+   * 
+   * Data dari menu: Daftar Laporan > Penjualan > Daftar Faktur Penjualan
+   */
+  private static async pullDaftarFakturPenjualan(host: string, session: string, token: string): Promise<number> {
+    try {
+      // Ambil daftar faktur penjualan dari Report API
+      const response = await axios.get(
+        `${host}/api/report/sales-invoice-list.do`,
+        {
+          params: { session },
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
+
+      if (!response.data || !response.data.d) {
+        // Fallback ke sales-invoice/list.do jika report API tidak ada
+        return await this.pullFakturPenjualan(host, session, token);
+      }
+
+      const invoices: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
+      let count = 0;
+
+      for (const inv of invoices) {
+        const customerNo = inv.customerNo || inv.customerId || 'UNKNOWN';
+        const customerName = inv.customerName || 'Pelanggan Umum';
+        
+        // Pastikan pelanggan ada di database
+        await prisma.pelanggan.upsert({
+          where: { id_pelanggan: customerNo },
+          update: { nama: customerName },
+          create: {
+            id_pelanggan: customerNo,
+            nama: customerName,
+            synced_at: new Date(),
+          },
+        });
+
+        // Simpan faktur penjualan
+        await prisma.fakturPenjualan.upsert({
+          where: { nomor: inv.number || inv.invoiceNumber },
+          update: {
+            id_pelanggan: customerNo,
+            tanggal: new Date(inv.transDate || inv.date),
+            total: inv.totalAmount || inv.total || 0,
+            pembayaran: inv.paidAmount || inv.paid || 0,
+            synced_at: new Date(),
+          },
+          create: {
+            nomor: inv.number || inv.invoiceNumber,
+            id_pelanggan: customerNo,
+            tanggal: new Date(inv.transDate || inv.date),
+            total: inv.totalAmount || inv.total || 0,
+            pembayaran: inv.paidAmount || inv.paid || 0,
+            synced_at: new Date(),
+          },
+        });
+
+        count++;
+      }
+
+      return count;
+    } catch (error: any) {
+      logger.error('Failed to pull Daftar Faktur Penjualan:', error.response?.data || error.message);
+      // Fallback to existing method
+      return await this.pullFakturPenjualan(host, session, token);
     }
   }
 }

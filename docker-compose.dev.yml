@@ -1,0 +1,86 @@
+version: '3.8'
+
+# Development Configuration dengan Hot Reload
+services:
+  # MySQL Database
+  dataanalis-db-dev:
+    image: mysql:8.0
+    container_name: dataanalis-mysql-dev
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: dataanalis
+      MYSQL_USER: dataanalis_user
+      MYSQL_PASSWORD: dataanalis_password
+    ports:
+      - "3309:3306"
+    volumes:
+      - dataanalis-mysql-dev-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/migration_add_transaksi_penjualan.sql:/docker-entrypoint-initdb.d/02-migration.sql
+    networks:
+      - dataanalis-dev-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API - Development dengan hot reload
+  dataanalis-backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dataanalis-api-dev
+    restart: unless-stopped
+    ports:
+      - "5010:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: development
+      DATABASE_URL: mysql://dataanalis_user:dataanalis_password@dataanalis-db-dev:3306/dataanalis
+      JWT_ACCESS_SECRET: dev_access_secret
+      JWT_REFRESH_SECRET: dev_refresh_secret
+      ENCRYPTION_KEY: e9ca72b146473e659357a7dbd8bc4b6845cb067756f7efb0f443b71c4c16a8b1
+      ACCURATE_MOCK: "true"
+    depends_on:
+      dataanalis-db-dev:
+        condition: service_healthy
+    networks:
+      - dataanalis-dev-network
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/logs:/app/logs
+      - /app/node_modules
+    command: npm run dev
+
+  # Frontend Next.js - Development dengan hot reload
+  dataanalis-frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dataanalis-web-dev
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5010/api
+      NODE_ENV: development
+    depends_on:
+      - dataanalis-backend-dev
+    networks:
+      - dataanalis-dev-network
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/.next
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  dataanalis-mysql-dev-data:
+    driver: local
+
+networks:
+  dataanalis-dev-network:
+    driver: bridge

@@ -500,3 +500,4 @@ export async function downloadReturPenjualan(_req: AuthenticatedRequest, res: Re
     return res.status(500).json({ message: 'Gagal mengunduh data retur penjualan' });
   }
 }
+

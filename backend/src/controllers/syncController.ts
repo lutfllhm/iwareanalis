@@ -335,6 +335,7 @@ const ALL_DOWNLOAD_MODULES = [
   'rincian-penjualan',
   'retur-penjualan',
   'mutasi-serial-number',
+  'serial-number-per-gudang',
   'ringkasan-mutasi-stok',
   'work-order',
 ];

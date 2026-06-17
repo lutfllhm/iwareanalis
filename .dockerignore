@@ -1,0 +1,47 @@
+# Dependencies
+node_modules
+npm-debug.log
+package-lock.json
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# Logs
+logs
+*.log
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Next.js
+.next
+out
+
+# Build
+dist
+build
+
+# Database
+*.sql
+database/
+
+# Documentation
+*.md
+README.md
+
+# Accurate API Documentation
+accurate/

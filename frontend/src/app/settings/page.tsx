@@ -33,9 +33,13 @@ function SettingsContent() {
   const [allModules] = useState([
     { key: 'barang-jasa', label: 'Daftar Barang & Jasa' },
     { key: 'pelanggan', label: 'Daftar Pelanggan' },
-    { key: 'faktur-penjualan', label: 'Faktur Penjualan' },
-    { key: 'rincian-penjualan', label: 'Rincian Penjualan' },
-    { key: 'retur-penjualan', label: 'Retur Penjualan' },
+    { key: 'faktur-penjualan', label: 'Daftar Faktur Penjualan' },
+    { key: 'rincian-penjualan', label: 'Rincian Penjualan per Barang' },
+    { key: 'retur-penjualan', label: 'Daftar Retur Penjualan' },
+    { key: 'mutasi-serial-number', label: 'Mutasi Serial Number' },
+    { key: 'serial-number-per-gudang', label: 'Serial Number per Gudang' },
+    { key: 'ringkasan-mutasi-stok', label: 'Ringkasan Mutasi Stok' },
+    { key: 'work-order', label: 'Work Order Detail' },
   ]);
 
   // 2FA TOTP setup states
