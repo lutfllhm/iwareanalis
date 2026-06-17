@@ -18,7 +18,16 @@ app.use(helmet());
 // 2. Cross-Origin Resource Sharing
 app.use(
   cors({
-    origin: ['https://iwanalys.iwareid.com', 'http://iwanalys.iwareid.com', 'http://localhost:3010', 'http://127.0.0.1:3010', 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: [
+      'https://iwanalys.iwareid.com',
+      'http://iwanalys.iwareid.com',
+      'http://localhost:3010',
+      'http://127.0.0.1:3010',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://145.79.8.148:3010',  // VPS IP frontend
+      'http://145.79.8.148:5010',  // VPS IP backend (for self-calls)
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
