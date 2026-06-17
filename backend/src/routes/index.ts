@@ -7,6 +7,7 @@ import * as syncController from '../controllers/syncController';
 import * as dataController from '../controllers/dataController';
 import * as analyticsController from '../controllers/analyticsController';
 import * as userController from '../controllers/userController';
+import * as reportController from '../controllers/reportController';
 
 const router = Router();
 
@@ -159,7 +160,18 @@ router.get('/analytics/work-orders', authenticateToken as any, analyticsControll
 
 
 // ==========================================
-// 5. USER MANAGEMENT ROUTES (Admin only)
+// 5. ACCURATE REPORT ROUTES (readonly, direct proxy)
+// ==========================================
+
+router.get(
+  '/report/rincian-penjualan-per-barang',
+  authenticateToken as any,
+  reportController.getRincianPenjualanPerBarang as any
+);
+
+
+// ==========================================
+// 6. USER MANAGEMENT ROUTES (Admin only)
 // ==========================================
 
 router.get(

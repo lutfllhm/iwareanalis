@@ -20,7 +20,8 @@ import {
   User as UserIcon,
   Bell,
   RefreshCw,
-  UserCheck
+  UserCheck,
+  BookOpen
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -37,6 +38,7 @@ const sidebarItems: SidebarItem[] = [
   { name: 'Faktur Penjualan', href: '/faktur-penjualan', icon: FileSpreadsheet },
   { name: 'Rincian Penjualan', href: '/rincian-penjualan', icon: FileSpreadsheet },
   { name: 'Retur Penjualan', href: '/retur-penjualan', icon: RefreshCw },
+  { name: 'Daftar Laporan', href: '/daftar-laporan/rincian-penjualan-per-barang', icon: BookOpen },
   { name: 'Laporan Data Analyst', href: '/laporan', icon: TrendingUp },
   { name: 'Manajemen User', href: '/users-management', icon: UserCheck, roles: ['admin'] },
   { name: 'Pengaturan', href: '/settings', icon: Settings },
@@ -101,7 +103,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Navigation items list */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {filteredItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
             return (
               <button
@@ -159,7 +161,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-1">
           {filteredItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
             return (
               <button

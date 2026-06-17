@@ -1,0 +1,344 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import DashboardLayout from '@/components/DashboardLayout';
+import api from '@/lib/api';
+import {
+  FileText, Calendar, Search, ChevronLeft, ChevronRight,
+  AlertCircle, Loader2, ShoppingBag, Settings
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+interface RincianRow {
+  nomorFaktur: string;
+  tanggal: string;
+  kodeBarang: string;
+  namaBarang: string;
+  kategoriBarang: string;
+  namaCustomer: string;
+  namaSalesman: string;
+  kuantitas: number;
+  satuan: string;
+  hargaSatuan: number;
+  diskon: number;
+  totalHarga: number;
+}
+
+const formatRupiah = (val: number) =>
+  new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0,
+  }).format(val || 0);
+
+const formatTanggal = (val: string) => {
+  if (!val) return '-';
+  return new Date(val).toLocaleDateString('id-ID', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+export default function RincianPenjualanPerBarangPage() {
+  const router = useRouter();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [q, setQ] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate],
+    queryFn: async () => {
+      const res = await api.get('/report/rincian-penjualan-per-barang', {
+        params: { page, limit, q, startDate, endDate },
+      });
+      return res.data;
+    },
+    retry: false,
+  });
+
+  const rows: RincianRow[] = data?.data || [];
+  const pagination = data?.pagination;
+  const isFromAccurate = data?.source === 'accurate';
+
+  const handleSearch = () => {
+    setQ(searchInput);
+    setPage(1);
+  };
+
+  const totalRows = rows.length;
+  const grandTotal = rows.reduce((sum, r) => sum + (r.totalHarga || 0), 0);
+
+  const errorCode = (error as any)?.response?.data?.code;
+  const errorMsg = (error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate';
+
+  return (
+    <DashboardLayout>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-xl bg-primary/10 text-primary mt-0.5">
+            <ShoppingBag size={22} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-black text-foreground tracking-tight">
+                Rincian Penjualan per Barang
+              </h2>
+              {isFromAccurate && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase">
+                  Live Accurate
+                </span>
+              )}
+              {data?.source === 'db' && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase">
+                  Data Lokal
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              Menampilkan rincian nilai penjualan per barang langsung dari Accurate Online
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border rounded-xl px-3 py-2">
+          <FileText size={14} className="text-primary" />
+          <span className="font-semibold">Daftar Laporan / Penjualan</span>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+          {/* Date range */}
+          <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
+            <Calendar size={15} className="text-muted-foreground" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+              className="bg-transparent text-xs text-foreground focus:outline-none w-28 font-semibold"
+            />
+            <span className="text-muted-foreground text-xs font-bold">s/d</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+              className="bg-transparent text-xs text-foreground focus:outline-none w-28 font-semibold"
+            />
+          </div>
+
+          {/* Search box */}
+          <div className="flex-1 flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
+            <Search size={15} className="text-muted-foreground flex-shrink-0" />
+            <input
+              type="text"
+              placeholder="Cari barang, faktur, pelanggan, salesman..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="bg-transparent text-xs text-foreground focus:outline-none flex-1 placeholder:text-muted-foreground"
+            />
+            <button
+              onClick={handleSearch}
+              className="text-xs font-bold text-primary hover:text-primary/80 transition-colors px-1"
+            >
+              Cari
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Error state */}
+      {isError && (
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5 flex items-start gap-4">
+          <AlertCircle size={22} className="text-rose-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-bold text-rose-600 dark:text-rose-400 text-sm">Gagal Memuat Data</p>
+            <p className="text-sm text-rose-600/80 dark:text-rose-400/80 mt-1">{errorMsg}</p>
+            {(errorCode === 'NOT_CONNECTED' || errorCode === 'TOKEN_EXPIRED') && (
+              <button
+                onClick={() => router.push('/settings')}
+                className="mt-3 flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors"
+              >
+                <Settings size={13} />
+                Buka Pengaturan Accurate
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="bg-card border border-border rounded-2xl p-12 flex flex-col items-center gap-3">
+          <Loader2 size={32} className="text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground font-semibold">Mengambil data dari Accurate Online...</p>
+        </div>
+      )}
+
+      {/* Table */}
+      {!isLoading && !isError && (
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+          {/* Table header info */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              {pagination?.total !== undefined
+                ? `${pagination.total} baris ditemukan`
+                : `${totalRows} baris ditampilkan`}
+            </span>
+            <span className="text-xs font-bold text-foreground">
+              Grand Total: <span className="text-primary">{formatRupiah(grandTotal)}</span>
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-muted/50 border-b border-border">
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">No. Faktur</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tanggal</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kode Barang</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Nama Barang</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kategori</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Pelanggan</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Salesman</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Qty</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Harga Satuan</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Diskon</th>
+                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm">
+                      Tidak ada data pada periode yang dipilih
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, idx) => (
+                    <tr key={`${row.nomorFaktur}-${row.kodeBarang}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-primary whitespace-nowrap">
+                        {row.nomorFaktur}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
+                        {formatTanggal(row.tanggal)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        {row.kodeBarang || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-foreground font-semibold">
+                        {row.namaBarang}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {row.kategoriBarang ? (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/15 font-semibold text-[11px]">
+                            {row.kategoriBarang}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-foreground">
+                        {row.namaCustomer || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
+                        {row.namaSalesman || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-right font-semibold text-foreground whitespace-nowrap">
+                        {(row.kuantitas || 0).toLocaleString('id-ID')}
+                        {row.satuan ? <span className="text-muted-foreground font-normal ml-1">{row.satuan}</span> : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-right text-foreground whitespace-nowrap">
+                        {formatRupiah(row.hargaSatuan)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-right whitespace-nowrap">
+                        {row.diskon > 0 ? (
+                          <span className="text-rose-500 font-semibold">-{formatRupiah(row.diskon)}</span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
+                        {formatRupiah(row.totalHarga)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr className="bg-muted/50 border-t-2 border-border">
+                    <td colSpan={7} className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Subtotal halaman ini ({rows.length} baris)
+                    </td>
+                    <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
+                      {rows.reduce((s, r) => s + (r.kuantitas || 0), 0).toLocaleString('id-ID')}
+                    </td>
+                    <td className="px-4 py-3" />
+                    <td className="px-4 py-3 text-xs text-right font-bold text-rose-500 whitespace-nowrap">
+                      -{formatRupiah(rows.reduce((s, r) => s + (r.diskon || 0), 0))}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-right font-bold text-primary whitespace-nowrap">
+                      {formatRupiah(grandTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3.5 border-t border-border">
+              <span className="text-xs text-muted-foreground font-semibold">
+                Halaman {pagination.page} dari {pagination.totalPages}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                  const pageNum = Math.max(1, Math.min(pagination.totalPages - 4, page - 2)) + i;
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                        pageNum === page
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'border border-border bg-card hover:bg-muted text-foreground'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                  disabled={page >= pagination.totalPages}
+                  className="p-1.5 rounded-lg border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}
