@@ -791,14 +791,6 @@ export class AccurateService {
     // Parameter Request yang diperlukan (dari dokumentasi API):
     // - session (wajib)
     // - itemNo (tidak wajib, tapi bisa kosong untuk semua barang)
-    
-    // Kita akan ambil data 1 bulan terakhir
-    const toDate = new Date();
-    const fromDate = new Date();
-    fromDate.setMonth(fromDate.getMonth() - 1);
-    
-    const fmt = (d: Date) =>
-      `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
     try {
       const response = await axios.get(
@@ -807,8 +799,6 @@ export class AccurateService {
           params: {
             session,
             // Kosongkan itemNo untuk ambil semua barang
-            // toDate: fmt(toDate),   // Jika API support filter tanggal
-            // fromDate: fmt(fromDate)
           },
           headers: { 'Authorization': `Bearer ${token}` },
         }
@@ -820,9 +810,6 @@ export class AccurateService {
 
       const rows: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
       let count = 0;
-
-      // Hapus data lama sebelum insert baru (optional, tergantung strategi sync)
-      // await prisma.rincianPenjualanBarang.deleteMany({});
 
       for (const row of rows) {
         const itemNo = row.itemNo || row.kode || row.itemCode || 'UNKNOWN';
