@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -10,7 +10,7 @@ import { Settings, Shield, User, RefreshCw, CheckCircle, XCircle, Key, QrCode, D
 // Disable static generation for this page
 export const dynamic = 'force-dynamic';
 
-export default function SettingsPage() {
+function SettingsContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'accurate' | 'security' | 'download'>('accurate');
@@ -743,5 +743,20 @@ export default function SettingsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center p-8">
+          <div className="text-muted-foreground">Memuat pengaturan...</div>
+        </div>
+      </DashboardLayout>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }
