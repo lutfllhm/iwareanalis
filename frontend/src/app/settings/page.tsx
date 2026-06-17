@@ -7,6 +7,9 @@ import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import { Settings, Shield, User, RefreshCw, CheckCircle, XCircle, Key, QrCode, Download, ToggleLeft, ToggleRight, Database } from 'lucide-react';
 
+// Disable static generation for this page
+export const dynamic = 'force-dynamic';
+
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
