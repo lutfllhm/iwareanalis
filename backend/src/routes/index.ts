@@ -90,6 +90,14 @@ router.get(
   syncController.handleOauthCallback as any
 );
 
+// Manual callback POST endpoint for when automatic redirect fails
+router.post(
+  '/sync/callback',
+  authenticateToken as any,
+  requireRole(['admin', 'analyst']) as any,
+  syncController.handleManualOauthCallback as any
+);
+
 router.get(
   '/sync/databases',
   authenticateToken as any,

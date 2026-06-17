@@ -227,6 +227,49 @@ export async function handleOauthCallback(req: AuthenticatedRequest, res: Respon
 }
 
 /**
+ * Handle Manual OAuth Callback (POST with code in body)
+ * For when automatic redirect fails and user copies code manually
+ */
+export async function handleManualOauthCallback(req: AuthenticatedRequest, res: Response) {
+  const { code } = req.body;
+
+  if (!code) {
+    return res.status(400).json({ message: 'Kode OAuth wajib diisi' });
+  }
+
+  try {
+    logger.info(`Manual OAuth code submission from ${req.user?.email}, exchanging for tokens...`);
+    await AccurateService.exchangeCodeForToken(code);
+
+    // Fetch database list after successful token exchange
+    const databases = await AccurateService.getDatabaseList();
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        user_id: req.user?.id,
+        user_email: req.user?.email,
+        aksi: 'ACCURATE_MANUAL_OAUTH',
+        target: 'OAuth Token Exchange',
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'] || '',
+      },
+    });
+
+    return res.status(200).json({
+      message: 'Berhasil terhubung dengan Accurate Online',
+      databases,
+    });
+  } catch (err: any) {
+    logger.error('Manual callback exchange failed:', err);
+    return res.status(500).json({ 
+      message: 'Gagal menukarkan kode OAuth',
+      error: err.message 
+    });
+  }
+}
+
+/**
  * Fetch databases list directly (using active credentials)
  */
 export async function getAccurateDatabases(_req: AuthenticatedRequest, res: Response) {
