@@ -49,12 +49,22 @@ export class AccurateService {
 
   /**
    * Generate Accurate Online Authorization URL
+   * Scope: READ ONLY untuk data master dan laporan penjualan
    */
   static getAuthUrl(): string {
     const clientId = config.accurate.clientId || 'your_client_id';
     const redirectUri = encodeURIComponent(config.accurate.redirectUri);
-    // Standard Accurate authorization scopes
-    const scope = encodeURIComponent('item_read sales_invoice_read sales_return_read');
+    
+    // Scope READ ONLY yang dibutuhkan:
+    // - item_read: Daftar barang/jasa
+    // - customer_read: Daftar pelanggan
+    // - sales_invoice_read: Faktur penjualan
+    // - sales_return_read: Retur penjualan
+    // - report_view: PENTING! Untuk akses laporan (Rincian Penjualan per Barang, dll)
+    // - work_order_read: Work order (manufacturing)
+    // - stock_mutation_read: Mutasi stok
+    const scope = encodeURIComponent('item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read');
+    
     return `https://account.accurate.id/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}`;
   }
 
@@ -300,6 +310,8 @@ export class AccurateService {
         syncCount = await this.pullFakturPenjualan(host, session, accessToken);
       } else if (moduleName === 'Retur Penjualan') {
         syncCount = await this.pullReturPenjualan(host, session, accessToken);
+      } else if (moduleName === 'Rincian Penjualan Barang') {
+        syncCount = await this.pullRincianPenjualanBarang(host, session, accessToken);
       } else if (moduleName === 'Mutasi Serial Number') {
         syncCount = await this.pullMutasiSerialNumber(host, session, accessToken);
       } else if (moduleName === 'Ringkasan Mutasi Stok') {
@@ -769,5 +781,92 @@ export class AccurateService {
     }
 
     return count;
+  }
+
+  /**
+   * Pull Rincian Penjualan per Barang dari Report API Accurate
+   * Endpoint: GET /api/report/get-sales-per-item.do (HTTP Method: GET, Scope: report_view)
+   */
+  private static async pullRincianPenjualanBarang(host: string, session: string, token: string): Promise<number> {
+    // Parameter Request yang diperlukan (dari dokumentasi API):
+    // - session (wajib)
+    // - itemNo (tidak wajib, tapi bisa kosong untuk semua barang)
+    
+    // Kita akan ambil data 1 bulan terakhir
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setMonth(fromDate.getMonth() - 1);
+    
+    const fmt = (d: Date) =>
+      `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
+    try {
+      const response = await axios.get(
+        `${host}/api/report/get-sales-per-item.do`,
+        {
+          params: {
+            session,
+            // Kosongkan itemNo untuk ambil semua barang
+            // toDate: fmt(toDate),   // Jika API support filter tanggal
+            // fromDate: fmt(fromDate)
+          },
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
+      );
+
+      if (!response.data || !response.data.d) {
+        throw new Error(response.data?.message || 'No sales per item data returned');
+      }
+
+      const rows: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
+      let count = 0;
+
+      // Hapus data lama sebelum insert baru (optional, tergantung strategi sync)
+      // await prisma.rincianPenjualanBarang.deleteMany({});
+
+      for (const row of rows) {
+        const itemNo = row.itemNo || row.kode || row.itemCode || 'UNKNOWN';
+        const itemName = row.itemName || row.namaBarang || 'Barang Tidak Diketahui';
+        
+        // Pastikan barang ada di master
+        await prisma.barangJasa.upsert({
+          where: { kode_barang: itemNo },
+          update: {},
+          create: {
+            kode_barang: itemNo,
+            nama_barang: itemName,
+            kategori_barang: 'Umum',
+            tgl_jam_pembuatan: new Date(),
+            kts_gdng_pengguna: 0,
+            kts_semua_gdng: 0,
+            synced_at: new Date(),
+          },
+        });
+
+        // Insert rincian penjualan
+        await prisma.rincianPenjualanBarang.create({
+          data: {
+            nomor: row.transactionNo || row.nomor || `INV-${Date.now()}-${count}`,
+            kode: itemNo,
+            nama_barang: itemName,
+            kuantitas: row.quantity || row.kuantitas || 0,
+            harga: row.unitPrice || row.harga || 0,
+            total_harga: row.amount || row.totalHarga || 0,
+            penjualan: row.salesAmount || row.penjualan || 0,
+            tanggal: row.transDate ? new Date(row.transDate) : new Date(),
+            nama_pelanggan: row.customerName || row.namaPelanggan || 'Umum',
+            nama_tenaga_penjual: row.salesmanName || row.namaSales || 'General',
+            id_karyawan_tenaga_penjual: row.salesmanId || row.idSales || 'SALES-001',
+            synced_at: new Date(),
+          },
+        });
+        count++;
+      }
+
+      return count;
+    } catch (error: any) {
+      logger.error('Failed to pull Rincian Penjualan per Barang:', error.response?.data || error.message);
+      throw error;
+    }
   }
 }
