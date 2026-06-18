@@ -153,29 +153,43 @@ Aplikasi Next.js (`port 3010`) dan Express API (`port 5010`) akan di-proxy oleh 
    sudo rm -f /etc/nginx/sites-enabled/default
    ```
 
-4. Buka file konfigurasi tersebut untuk memverifikasi domain:
+4. **Buat Sertifikat SSL Dummy (Self-Signed) Sementara**:
+   Karena file `nginx.conf` sudah merujuk ke jalur SSL Let's Encrypt (`/etc/letsencrypt/live/analys.iwareid.com/...`), Nginx akan memicu error **BIO_new_file() failed** jika berkas tersebut belum ada. Kita buat sertifikat dummy sementara agar Nginx bisa menyala:
+   ```bash
+   # 1. Buat folder sertifikat (ganti dengan domain Anda jika berbeda)
+   sudo mkdir -p /etc/letsencrypt/live/analys.iwareid.com
+
+   # 2. Buat sertifikat dummy self-signed
+   sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /etc/letsencrypt/live/analys.iwareid.com/privkey.pem \
+     -out /etc/letsencrypt/live/analys.iwareid.com/fullchain.pem \
+     -subj "/CN=analys.iwareid.com"
+   ```
+
+5. Buka file konfigurasi tersebut untuk memverifikasi domain:
    ```bash
    sudo nano /etc/nginx/sites-available/dataanalis
    ```
    *Pastikan nilai variabel `server_name` sudah diubah ke domain Anda (misal: `analys.iwareid.com`).*
 
-5. Uji konfigurasi Nginx untuk memastikan tidak ada error syntax:
+6. Uji konfigurasi Nginx untuk memastikan tidak ada error syntax:
    ```bash
    sudo nginx -t
    ```
+   *(Sekarang pengetesan ini seharusnya berhasil karena file sertifikat dummy sudah ada)*
 
-6. Restart layanan Nginx:
+7. Restart layanan Nginx:
    ```bash
    sudo systemctl restart nginx
    ```
 
-7. **Instalasi Sertifikat SSL Let's Encrypt**:
-   Certbot akan otomatis memodifikasi konfigurasi Nginx Anda untuk menyisipkan konfigurasi SSL.
+8. **Instalasi Sertifikat SSL Resmi (Let's Encrypt)**:
+   Jalankan Certbot untuk menimpa sertifikat dummy tadi dengan sertifikat resmi Let's Encrypt secara otomatis:
    ```bash
-   sudo certbot --nginx -d analys.iwareid.com
+   sudo certbot --nginx -d analys.iwareid.com --force-renewal
    ```
-   > [!NOTE]
-   > Certbot akan menanyakan apakah Anda ingin mengalihkan (redirect) seluruh traffic HTTP ke HTTPS secara otomatis. Pilih opsi **Redirect** (biasanya opsi nomor `2`).
+   *(Pilih opsi untuk mengalihkan/redirect HTTP ke HTTPS jika ditanyakan oleh Certbot)*
+
 
 ---
 
