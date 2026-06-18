@@ -2,7 +2,6 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { AccurateService } from '../services/accurateService';
 import { startSyncScheduler } from '../services/syncScheduler';
-import { config } from '../config';
 import prisma from '../services/db';
 import logger from '../services/logger';
 
