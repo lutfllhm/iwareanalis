@@ -12,7 +12,7 @@ services:
       MYSQL_USER: ${DB_USER:-dataanalis_user}
       MYSQL_PASSWORD: ${DB_PASSWORD:-dataanalis_pass}
     ports:
-      - "3309:3306"
+      - "3319:3306"
     volumes:
       - dataanalis-mysql-data:/var/lib/mysql
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
