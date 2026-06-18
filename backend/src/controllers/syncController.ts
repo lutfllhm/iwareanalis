@@ -203,7 +203,8 @@ export async function handleOauthCallback(req: AuthenticatedRequest, res: Respon
   const code = req.query.code as string;
   const error = req.query.error as string;
 
-  const frontendUrl = config.frontendUrl;
+  // Determine frontend URL - use settings page
+  const frontendUrl = 'https://analys.iwareid.com';
 
   if (error) {
     logger.error(`Accurate OAuth error: ${error} - ${req.query.error_description}`);
