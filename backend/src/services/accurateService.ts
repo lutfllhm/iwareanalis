@@ -49,25 +49,17 @@ export class AccurateService {
 
   /**
    * Generate Accurate Online Authorization URL
-   * Scope: READ ONLY untuk data master dan laporan penjualan
+   * Accurate Online menggunakan OAuth 2.0 tanpa explicit scope parameter
    */
   static getAuthUrl(): string {
     const clientId = config.accurate.clientId || 'your_client_id';
     const redirectUri = config.accurate.redirectUri;
     
-    // Scope READ ONLY yang dibutuhkan (minimal scope untuk basic functionality):
-    // - item_read: Daftar barang/jasa
-    // - customer_read: Daftar pelanggan
-    // - sales_invoice_read: Faktur penjualan
-    // - report_view: PENTING! Untuk akses laporan
-    const scope = 'item_read customer_read sales_invoice_read report_view';
-    
-    // Build URL with proper encoding
+    // Build URL - Accurate tidak memerlukan scope parameter
     const params = new URLSearchParams({
       client_id: clientId,
       response_type: 'code',
       redirect_uri: redirectUri,
-      scope: scope,
     });
     
     return `https://account.accurate.id/oauth/authorize?${params.toString()}`;
