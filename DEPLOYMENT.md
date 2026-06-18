@@ -319,6 +319,15 @@ Atau melihat log dari kontainer backend/API saja:
 docker compose logs -f dataanalis-backend
 ```
 
+### Masalah: Certbot Error NXDOMAIN (DNS problem: NXDOMAIN looking up A for...)
+Error ini terjadi karena Let's Encrypt tidak bisa memverifikasi domain Anda karena domain tersebut belum diarahkan ke IP VPS Anda di DNS Manager (atau propagasi DNS belum selesai).
+*   **Solusi:** 
+    1. Masuk ke DNS Manager domain Anda (Cloudflare, registrar domain, dll).
+    2. Tambahkan **A Record** baru dengan name `analys` dan targetkan ke IP Publik VPS Anda.
+    3. Tunggu sekitar 5-15 menit agar DNS menyebar.
+    4. Setelah DNS aktif, jalankan ulang: `sudo certbot --nginx -d analys.iwareid.com --force-renewal`.
+    5. Selama menunggu DNS aktif, Anda tetap bisa melanjutkan deployment Docker. Browser hanya akan menampilkan peringatan keamanan (karena menggunakan SSL Dummy), klik **Advanced** -> **Proceed to website** untuk melewatinya sementara.
+
 ### Masalah: Kontainer Tidak Mau Menyala (Exit Status 1)
 Hal ini biasanya disebabkan oleh kesalahan konfigurasi `.env`. Jalankan perintah berikut untuk mengecek error yang terjadi di baris code Node.js:
 ```bash
