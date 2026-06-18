@@ -864,8 +864,9 @@ export class AccurateService {
    * Endpoint: GET /api/report/sales-invoice-list.do (Scope: report_view)
    * 
    * Data dari menu: Daftar Laporan > Penjualan > Daftar Faktur Penjualan
+   * @note Currently not used but kept for future implementation
    */
-  private static async pullDaftarFakturPenjualan(host: string, session: string, token: string): Promise<number> {
+  public static async pullDaftarFakturPenjualan(host: string, session: string, token: string): Promise<number> {
     try {
       // Ambil daftar faktur penjualan dari Report API
       const response = await axios.get(
