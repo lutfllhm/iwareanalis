@@ -55,15 +55,12 @@ export class AccurateService {
     const clientId = config.accurate.clientId || 'your_client_id';
     const redirectUri = config.accurate.redirectUri;
     
-    // Scope READ ONLY yang dibutuhkan (tanpa encode dulu):
+    // Scope READ ONLY yang dibutuhkan (minimal scope untuk basic functionality):
     // - item_read: Daftar barang/jasa
     // - customer_read: Daftar pelanggan
     // - sales_invoice_read: Faktur penjualan
-    // - sales_return_read: Retur penjualan
-    // - report_view: PENTING! Untuk akses laporan (Rincian Penjualan per Barang, dll)
-    // - work_order_read: Work order (manufacturing)
-    // - stock_mutation_read: Mutasi stok
-    const scope = 'item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read';
+    // - report_view: PENTING! Untuk akses laporan
+    const scope = 'item_read customer_read sales_invoice_read report_view';
     
     // Build URL with proper encoding
     const params = new URLSearchParams({
