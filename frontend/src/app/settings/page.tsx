@@ -144,10 +144,10 @@ function SettingsContent() {
       return res.data;
     },
     onSuccess: (data) => {
-      // Redirect to authorization URL
+      // Redirect to authorization URL in same window
       if (data.authUrl) {
-        window.open(data.authUrl, '_blank');
-        setToast({ type: 'success', msg: 'URL otorisasi dibuka. Silakan masukkan kode pada callback di bawah.' });
+        // Use same window instead of opening new tab for proper OAuth flow
+        window.location.href = data.authUrl;
       }
     },
     onError: (err: any) => {

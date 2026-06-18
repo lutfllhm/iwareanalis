@@ -53,9 +53,9 @@ export class AccurateService {
    */
   static getAuthUrl(): string {
     const clientId = config.accurate.clientId || 'your_client_id';
-    const redirectUri = encodeURIComponent(config.accurate.redirectUri);
+    const redirectUri = config.accurate.redirectUri;
     
-    // Scope READ ONLY yang dibutuhkan:
+    // Scope READ ONLY yang dibutuhkan (tanpa encode dulu):
     // - item_read: Daftar barang/jasa
     // - customer_read: Daftar pelanggan
     // - sales_invoice_read: Faktur penjualan
@@ -63,9 +63,17 @@ export class AccurateService {
     // - report_view: PENTING! Untuk akses laporan (Rincian Penjualan per Barang, dll)
     // - work_order_read: Work order (manufacturing)
     // - stock_mutation_read: Mutasi stok
-    const scope = encodeURIComponent('item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read');
+    const scope = 'item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read';
     
-    return `https://account.accurate.id/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}`;
+    // Build URL with proper encoding
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      scope: scope,
+    });
+    
+    return `https://account.accurate.id/oauth/authorize?${params.toString()}`;
   }
 
   /**
