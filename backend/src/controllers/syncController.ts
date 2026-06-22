@@ -182,145 +182,43 @@ export async function updateSettings(req: AuthenticatedRequest, res: Response) {
 }
 
 /**
- * Connect to Accurate Online (Generates Redirect url)
+ * Save App Key + Signature Secret + API Token, then verify them against
+ * Accurate Online (/api/api-token.do). On success this also discovers the
+ * dynamic API host and Data Usaha info needed for subsequent report/sync calls.
  */
-export async function getAccurateAuthUrl(_req: AuthenticatedRequest, res: Response) {
-  try {
-    const authUrl = AccurateService.getAuthUrl();
-    return res.status(200).json({ authUrl });
-  } catch (error) {
-    logger.error('Failed to generate auth url:', error);
-    return res.status(500).json({ message: 'Gagal membuat URL autentikasi' });
-  }
-}
+export async function connectAccurateApiToken(req: AuthenticatedRequest, res: Response) {
+  const { appKey, signatureSecret, apiToken } = req.body;
 
-/**
- * Handle Accurate OAuth2 Callback
- */
-export async function handleOauthCallback(req: AuthenticatedRequest, res: Response) {
-  // Accurate redirects browser via GET with code in query string
-  const code = req.query.code as string;
-  const error = req.query.error as string;
-
-  // Determine frontend URL - use settings page
-  const frontendUrl = 'https://analys.iwareid.com';
-
-  if (error) {
-    logger.error(`Accurate OAuth error: ${error} - ${req.query.error_description}`);
-    return res.redirect(`${frontendUrl}/settings?accurate_error=${encodeURIComponent(error)}`);
-  }
-
-  if (!code) {
-    return res.redirect(`${frontendUrl}/settings?accurate_error=missing_code`);
+  if (!appKey || !signatureSecret || !apiToken) {
+    return res.status(400).json({ message: 'App Key, Signature Secret, dan API Token wajib diisi' });
   }
 
   try {
-    logger.info(`Received OAuth code from Accurate, exchanging for tokens...`);
-    await AccurateService.exchangeCodeForToken(code);
+    await AccurateService.saveSetting('ACCURATE_APP_KEY', appKey);
+    await AccurateService.saveSetting('ACCURATE_SIGNATURE_SECRET', signatureSecret);
+    await AccurateService.saveSetting('ACCURATE_API_TOKEN', apiToken);
 
-    // Redirect back to settings page with success flag so frontend can fetch DB list
-    return res.redirect(`${frontendUrl}/settings?accurate_connected=true`);
-  } catch (err: any) {
-    logger.error('Accurate callback exchange failed:', err);
-    return res.redirect(`${frontendUrl}/settings?accurate_error=${encodeURIComponent(err.message)}`);
-  }
-}
+    const result = await AccurateService.verifyApiToken();
 
-/**
- * Handle Manual OAuth Callback (POST with code in body)
- * For when automatic redirect fails and user copies code manually
- */
-export async function handleManualOauthCallback(req: AuthenticatedRequest, res: Response) {
-  const { code } = req.body;
-
-  if (!code) {
-    return res.status(400).json({ message: 'Kode OAuth wajib diisi' });
-  }
-
-  try {
-    logger.info(`Manual OAuth code submission from ${req.user?.email}, exchanging for tokens...`);
-    await AccurateService.exchangeCodeForToken(code);
-
-    // Fetch database list after successful token exchange
-    const databases = await AccurateService.getDatabaseList();
-
-    // Audit log
     await prisma.auditLog.create({
       data: {
         user_id: req.user?.id,
         user_email: req.user?.email,
-        aksi: 'ACCURATE_MANUAL_OAUTH',
-        target: 'OAuth Token Exchange',
+        aksi: 'ACCURATE_CONNECT_API_TOKEN',
+        target: result.dbAlias,
         ip_address: req.ip,
         user_agent: req.headers['user-agent'] || '',
       },
     });
 
     return res.status(200).json({
-      message: 'Berhasil terhubung dengan Accurate Online',
-      databases,
+      message: `Berhasil terhubung ke Accurate Online (${result.dbAlias})`,
+      ...result,
     });
   } catch (err: any) {
-    logger.error('Manual callback exchange failed:', err);
-    return res.status(500).json({ 
-      message: 'Gagal menukarkan kode OAuth',
-      error: err.message 
-    });
-  }
-}
-
-/**
- * Fetch databases list directly (using active credentials)
- */
-export async function getAccurateDatabases(_req: AuthenticatedRequest, res: Response) {
-  try {
-    const dbs = await AccurateService.getDatabaseList();
-    return res.status(200).json(dbs);
-  } catch (error: any) {
-    logger.error('Failed to get Accurate databases:', error);
-    return res.status(500).json({ message: error.message || 'Gagal mengambil database' });
-  }
-}
-
-/**
- * Select company database and trigger session initialization
- */
-export async function selectAccurateDatabase(req: AuthenticatedRequest, res: Response) {
-  const { dbId, dbName } = req.body;
-
-  if (!dbId || !dbName) {
-    return res.status(400).json({ message: 'ID dan Nama Database wajib dipilih' });
-  }
-
-  try {
-    logger.info(`Opening DB session for company DB ID: ${dbId} - ${dbName}`);
-    const sessionResult = await AccurateService.openDbSession(dbId);
-
-    // Save database metadata
-    await AccurateService.saveSetting('ACCURATE_DB_ID', dbId);
-    await AccurateService.saveSetting('ACCURATE_DB_NAME', dbName);
-
-    // Audit log database selection
-    await prisma.auditLog.create({
-      data: {
-        user_id: req.user?.id,
-        user_email: req.user?.email,
-        aksi: 'ACCURATE_SELECT_DB',
-        target: dbName,
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'] || '',
-      },
-    });
-
-    return res.status(200).json({
-      message: `Berhasil membuka database ${dbName}`,
-      session: sessionResult.session,
-    });
-  } catch (error: any) {
-    logger.error(`Database session activation failed:`, error);
-    return res.status(500).json({ 
-      message: 'Gagal membuka database pilihan',
-      error: error.message 
+    logger.error('Accurate API Token verification failed:', err);
+    return res.status(500).json({
+      message: err.message || 'Gagal memverifikasi API Token',
     });
   }
 }

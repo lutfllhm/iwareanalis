@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'crypto';
 import prisma from './db';
 import { encrypt, decrypt } from './cryptoService';
 import { config } from '../config';
@@ -48,195 +49,81 @@ export class AccurateService {
   }
 
   /**
-   * Generate Accurate Online Authorization URL
-   * Accurate Online menggunakan OAuth 2.0 tanpa explicit scope parameter
+   * Build the HTTP headers required for an Accurate Online API Token request:
+   * Authorization (Bearer API Token), X-Api-Timestamp and X-Api-Signature
+   * (HMAC-SHA256 of the timestamp, keyed with the Signature Secret, Base64-encoded).
    */
-  static getAuthUrl(): string {
-    const clientId = config.accurate.clientId || 'your_client_id';
-    const redirectUri = config.accurate.redirectUri;
-    
-    // Build URL - Accurate tidak memerlukan scope parameter
-    const params = new URLSearchParams({
-      client_id: clientId,
-      response_type: 'code',
-      redirect_uri: redirectUri,
-    });
-    
-    return `https://account.accurate.id/oauth/authorize?${params.toString()}`;
+  static async getApiTokenHeaders(): Promise<Record<string, string>> {
+    const apiToken = await this.getSetting('ACCURATE_API_TOKEN');
+    const signatureSecret = await this.getSetting('ACCURATE_SIGNATURE_SECRET');
+
+    if (!apiToken || !signatureSecret) {
+      throw new Error('API Token belum dikonfigurasi. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.');
+    }
+
+    const timestamp = new Date().toLocaleString('en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).replace(',', '');
+
+    const signature = crypto
+      .createHmac('sha256', signatureSecret)
+      .update(timestamp)
+      .digest('base64');
+
+    return {
+      'Authorization': `Bearer ${apiToken}`,
+      'X-Api-Timestamp': timestamp,
+      'X-Api-Signature': signature,
+    };
   }
 
   /**
-   * Exchange authorization code for access and refresh tokens
+   * Verify the App Key + API Token by calling /api/api-token.do, which also
+   * reveals the dynamic host (e.g. https://zeus.accurate.id) to use for
+   * subsequent API calls against the user's data usaha.
    */
-  static async exchangeCodeForToken(code: string): Promise<any> {
+  static async verifyApiToken(): Promise<{ host: string; dbAlias: string; dbId: number }> {
     if (config.accurate.mock) {
-      logger.info('OAuth Exchange code for token (MOCK MODE)');
-      const mockTokens = {
-        access_token: 'mock_access_token_' + Math.random().toString(36).substring(2),
-        refresh_token: 'mock_refresh_token_' + Math.random().toString(36).substring(2),
-        expires_in: 3600,
-      };
-      await this.saveSetting('ACCURATE_ACCESS_TOKEN', mockTokens.access_token);
-      await this.saveSetting('ACCURATE_REFRESH_TOKEN', mockTokens.refresh_token);
-      return mockTokens;
-    }
-
-    try {
-      const clientId = config.accurate.clientId;
-      const clientSecret = config.accurate.clientSecret;
-      const redirectUri = config.accurate.redirectUri;
-
-      const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-      const response = await axios.post(
-        'https://account.accurate.id/oauth/token',
-        new URLSearchParams({
-          grant_type: 'authorization_code',
-          code,
-          redirect_uri: redirectUri,
-        }).toString(),
-        {
-          headers: {
-            'Authorization': `Basic ${authHeader}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      );
-
-      const { access_token, refresh_token } = response.data;
-      await this.saveSetting('ACCURATE_ACCESS_TOKEN', access_token);
-      await this.saveSetting('ACCURATE_REFRESH_TOKEN', refresh_token);
-      
-      logger.info('OAuth Tokens exchanged and saved successfully.');
-      return response.data;
-    } catch (error: any) {
-      logger.error('Failed to exchange auth code:', error.response?.data || error.message);
-      throw new Error('Failed to exchange authorization code');
-    }
-  }
-
-  /**
-   * Refresh the access token using the refresh token
-   */
-  static async refreshAccessToken(): Promise<string> {
-    const refreshToken = await this.getSetting('ACCURATE_REFRESH_TOKEN');
-    if (!refreshToken) {
-      throw new Error('No refresh token available. Re-auth required.');
-    }
-
-    if (config.accurate.mock) {
-      logger.info('Refresh Access Token (MOCK MODE)');
-      const newAccessToken = 'mock_access_token_refreshed_' + Math.random().toString(36).substring(2);
-      await this.saveSetting('ACCURATE_ACCESS_TOKEN', newAccessToken);
-      return newAccessToken;
-    }
-
-    try {
-      const clientId = config.accurate.clientId;
-      const clientSecret = config.accurate.clientSecret;
-
-      const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-      const response = await axios.post(
-        'https://account.accurate.id/oauth/token',
-        new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-        }).toString(),
-        {
-          headers: {
-            'Authorization': `Basic ${authHeader}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      );
-
-      const { access_token, refresh_token } = response.data;
-      await this.saveSetting('ACCURATE_ACCESS_TOKEN', access_token);
-      if (refresh_token) {
-        await this.saveSetting('ACCURATE_REFRESH_TOKEN', refresh_token);
-      }
-      
-      logger.info('Access Token refreshed successfully.');
-      return access_token;
-    } catch (error: any) {
-      logger.error('Failed to refresh access token:', error.response?.data || error.message);
-      throw new Error('Failed to refresh access token');
-    }
-  }
-
-  /**
-   * Get user databases listing from Accurate
-   */
-  static async getDatabaseList(): Promise<any[]> {
-    if (config.accurate.mock) {
-      logger.info('Get database listing (MOCK MODE)');
-      return [
-        { id: '12345', name: 'PT. Maju Bersama (MOCK)' },
-        { id: '67890', name: 'CV. Bintang Mas (MOCK)' },
-      ];
-    }
-
-    const accessToken = await this.getSetting('ACCURATE_ACCESS_TOKEN');
-    if (!accessToken) {
-      throw new Error('Access token not available. Please authorize first.');
-    }
-
-    try {
-      const response = await axios.get('https://api.accurate.id/api/db-list.do', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
-
-      if (response.data && response.data.d) {
-        return response.data.d; // returns array of databases
-      }
-      return [];
-    } catch (error: any) {
-      logger.error('Failed to fetch database list:', error.response?.data || error.message);
-      throw new Error('Failed to fetch database list');
-    }
-  }
-
-  /**
-   * Open database session and retrieve session ID and Host
-   */
-  static async openDbSession(dbId: string): Promise<any> {
-    if (config.accurate.mock) {
-      logger.info(`Open database session for ID ${dbId} (MOCK MODE)`);
-      const sessionInfo = {
-        session: 'mock_session_key_998877',
-        host: 'https://api.accurate.id',
-      };
-      await this.saveSetting('ACCURATE_SESSION_ID', sessionInfo.session);
+      logger.info('Verify API Token (MOCK MODE)');
+      const sessionInfo = { host: 'https://api.accurate.id', dbAlias: 'PT AOL User (MOCK)', dbId: 12345 };
       await this.saveSetting('ACCURATE_SESSION_HOST', sessionInfo.host);
-      await this.saveSetting('ACCURATE_DB_ID', dbId);
+      await this.saveSetting('ACCURATE_DB_ID', String(sessionInfo.dbId));
+      await this.saveSetting('ACCURATE_DB_NAME', sessionInfo.dbAlias);
       return sessionInfo;
     }
 
-    const accessToken = await this.getSetting('ACCURATE_ACCESS_TOKEN');
-    if (!accessToken) {
-      throw new Error('Access token not available. Please authorize first.');
-    }
+    const headers = await this.getApiTokenHeaders();
 
     try {
-      const response = await axios.get(`https://api.accurate.id/api/open-db.do?id=${dbId}`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      });
+      const response = await axios.post(
+        'https://account.accurate.id/api/api-token.do',
+        null,
+        { headers, maxRedirects: 5 }
+      );
 
-      if (response.data && response.data.status) {
-        const { session, host } = response.data;
-        await this.saveSetting('ACCURATE_SESSION_ID', session);
-        await this.saveSetting('ACCURATE_SESSION_HOST', host);
-        await this.saveSetting('ACCURATE_DB_ID', dbId);
-        logger.info(`Database session opened: session=${session}, host=${host}`);
-        return { session, host };
+      if (!response.data || !response.data.s) {
+        throw new Error(response.data?.d || response.data?.message || 'API Token tidak valid');
       }
-      throw new Error(response.data.message || 'Failed to open database');
+
+      const dataUsaha = response.data.d?.['data usaha'] || response.data.d?.dataUsaha;
+      const host = dataUsaha?.host;
+      const dbId = dataUsaha?.id;
+      const dbAlias = dataUsaha?.alias;
+
+      if (!host) {
+        throw new Error('Response Accurate tidak menyertakan host Data Usaha');
+      }
+
+      await this.saveSetting('ACCURATE_SESSION_HOST', host);
+      if (dbId) await this.saveSetting('ACCURATE_DB_ID', String(dbId));
+      if (dbAlias) await this.saveSetting('ACCURATE_DB_NAME', dbAlias);
+
+      logger.info(`Accurate API Token verified: host=${host}, db=${dbAlias}`);
+      return { host, dbAlias, dbId };
     } catch (error: any) {
-      logger.error('Failed to open database session:', error.response?.data || error.message);
-      throw new Error('Failed to open database session');
+      logger.error('Failed to verify API Token:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.d || 'Gagal memverifikasi API Token');
     }
   }
 
@@ -292,31 +179,29 @@ export class AccurateService {
       }
 
       // REAL ACCURATE INTEGRATION
-      const accessToken = await this.getSetting('ACCURATE_ACCESS_TOKEN');
-      const session = await this.getSetting('ACCURATE_SESSION_ID');
       const host = await this.getSetting('ACCURATE_SESSION_HOST');
-
-      if (!accessToken || !session || !host) {
-        throw new Error('Accurate authentication session is missing. Please authorize and open database first.');
+      if (!host) {
+        throw new Error('Accurate authentication session is missing. Please connect and verify the API Token first.');
       }
+      const headers = await this.getApiTokenHeaders();
 
       // Fetch data depending on the module
       if (moduleName === 'Barang & Jasa') {
-        syncCount = await this.pullBarangJasa(host, session, accessToken);
+        syncCount = await this.pullBarangJasa(host, headers);
       } else if (moduleName === 'Pelanggan') {
-        syncCount = await this.pullPelanggan(host, session, accessToken);
+        syncCount = await this.pullPelanggan(host, headers);
       } else if (moduleName === 'Faktur Penjualan') {
-        syncCount = await this.pullFakturPenjualan(host, session, accessToken);
+        syncCount = await this.pullFakturPenjualan(host, headers);
       } else if (moduleName === 'Retur Penjualan') {
-        syncCount = await this.pullReturPenjualan(host, session, accessToken);
+        syncCount = await this.pullReturPenjualan(host, headers);
       } else if (moduleName === 'Rincian Penjualan Barang') {
-        syncCount = await this.pullRincianPenjualanBarang(host, session, accessToken);
+        syncCount = await this.pullRincianPenjualanBarang(host, headers);
       } else if (moduleName === 'Mutasi Serial Number') {
-        syncCount = await this.pullMutasiSerialNumber(host, session, accessToken);
+        syncCount = await this.pullMutasiSerialNumber(host, headers);
       } else if (moduleName === 'Ringkasan Mutasi Stok') {
-        syncCount = await this.pullRingkasanMutasiStok(host, session, accessToken);
+        syncCount = await this.pullRingkasanMutasiStok(host, headers);
       } else if (moduleName === 'Work Order') {
-        syncCount = await this.pullWorkOrder(host, session, accessToken);
+        syncCount = await this.pullWorkOrder(host, headers);
       } else {
         throw new Error(`Unknown module: ${moduleName}`);
       }
@@ -353,19 +238,16 @@ export class AccurateService {
 
   // --- Real Puller Implementations ---
 
-  private static async pullBarangJasa(host: string, session: string, token: string): Promise<number> {
+  private static async pullBarangJasa(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/item/list.do
     const response = await axios.post(
-      `${host}/api/item/list.do`,
+      `${host}/accurate/api/item/list.do`,
       new URLSearchParams({
-        session,
         fields: 'no,name,itemType,itemCategory,upToDate,suspended,quantity,totalQuantity',
       }).toString(),
       {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
     );
 
@@ -406,19 +288,16 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullPelanggan(host: string, session: string, token: string): Promise<number> {
+  private static async pullPelanggan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/customer/list.do
     const response = await axios.post(
-      `${host}/api/customer/list.do`,
+      `${host}/accurate/api/customer/list.do`,
       new URLSearchParams({
-        session,
         fields: 'id,name,customerNo,customerGroup,suspended,shipZipCode,shipCity,shipProvince,shipStreet',
       }).toString(),
       {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
     );
 
@@ -459,19 +338,16 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullFakturPenjualan(host: string, session: string, token: string): Promise<number> {
+  private static async pullFakturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/sales-invoice/list.do
     const response = await axios.post(
-      `${host}/api/sales-invoice/list.do`,
+      `${host}/accurate/api/sales-invoice/list.do`,
       new URLSearchParams({
-        session,
         fields: 'number,transDate,customer,totalAmount,paymentAmount,salesman,detailList',
       }).toString(),
       {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
     );
 
@@ -570,14 +446,11 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullMutasiSerialNumber(host: string, session: string, token: string): Promise<number> {
+  private static async pullMutasiSerialNumber(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: GET /api/report/serial-number-mutation.do
     const response = await axios.get(
-      `${host}/api/report/serial-number-mutation.do`,
-      {
-        params: { session },
-        headers: { 'Authorization': `Bearer ${token}` },
-      }
+      `${host}/accurate/api/report/serial-number-mutation.do`,
+      { headers, maxRedirects: 5 }
     );
 
     if (!response.data || !response.data.d) {
@@ -606,7 +479,7 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullRingkasanMutasiStok(host: string, session: string, token: string): Promise<number> {
+  private static async pullRingkasanMutasiStok(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: GET /api/report/stock-mutation-summary.do
     // Requires fromDate, itemNo, toDate (wajib) — kita gunakan 1 tahun terakhir sebagai default
     const toDate = new Date();
@@ -622,15 +495,15 @@ export class AccurateService {
     for (const item of items) {
       try {
         const response = await axios.get(
-          `${host}/api/report/stock-mutation-summary.do`,
+          `${host}/accurate/api/report/stock-mutation-summary.do`,
           {
             params: {
-              session,
               itemNo: item.kode_barang,
               fromDate: fmt(fromDate),
               toDate: fmt(toDate),
             },
-            headers: { 'Authorization': `Bearer ${token}` },
+            headers,
+            maxRedirects: 5,
           }
         );
 
@@ -663,18 +536,16 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullWorkOrder(host: string, session: string, token: string): Promise<number> {
+  private static async pullWorkOrder(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: GET /api/report/work-order-detail.do
     // Tidak ada parameter wajib selain workOrderNo — kita ambil list dulu jika ada endpoint list
     // Fallback: gunakan work-order/list.do untuk mendapatkan semua nomor WO
     const listResponse = await axios.post(
-      `${host}/api/work-order/list.do`,
-      new URLSearchParams({ session, fields: 'number,transDate,item,targetQuantity,realizedQuantity,status,description' }).toString(),
+      `${host}/accurate/api/work-order/list.do`,
+      new URLSearchParams({ fields: 'number,transDate,item,targetQuantity,realizedQuantity,status,description' }).toString(),
       {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
     );
 
@@ -716,19 +587,16 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullReturPenjualan(host: string, session: string, token: string): Promise<number> {
+  private static async pullReturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/sales-return/list.do
     const response = await axios.post(
-      `${host}/api/sales-return/list.do`,
+      `${host}/accurate/api/sales-return/list.do`,
       new URLSearchParams({
-        session,
         fields: 'number,transDate,customer,totalAmount,salesman',
       }).toString(),
       {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
     );
 
@@ -786,21 +654,14 @@ export class AccurateService {
    * Pull Rincian Penjualan per Barang dari Report API Accurate
    * Endpoint: GET /api/report/get-sales-per-item.do (HTTP Method: GET, Scope: report_view)
    */
-  private static async pullRincianPenjualanBarang(host: string, session: string, token: string): Promise<number> {
+  private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>): Promise<number> {
     // Parameter Request yang diperlukan (dari dokumentasi API):
-    // - session (wajib)
-    // - itemNo (tidak wajib, tapi bisa kosong untuk semua barang)
+    // - itemNo (tidak wajib, kosongkan untuk ambil semua barang)
 
     try {
       const response = await axios.get(
-        `${host}/api/report/get-sales-per-item.do`,
-        {
-          params: {
-            session,
-            // Kosongkan itemNo untuk ambil semua barang
-          },
-          headers: { 'Authorization': `Bearer ${token}` },
-        }
+        `${host}/accurate/api/report/get-sales-per-item.do`,
+        { headers, maxRedirects: 5 }
       );
 
       if (!response.data || !response.data.d) {
@@ -863,20 +724,17 @@ export class AccurateService {
    * Data dari menu: Daftar Laporan > Penjualan > Daftar Faktur Penjualan
    * @note Currently not used but kept for future implementation
    */
-  public static async pullDaftarFakturPenjualan(host: string, session: string, token: string): Promise<number> {
+  public static async pullDaftarFakturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
     try {
       // Ambil daftar faktur penjualan dari Report API
       const response = await axios.get(
-        `${host}/api/report/sales-invoice-list.do`,
-        {
-          params: { session },
-          headers: { 'Authorization': `Bearer ${token}` },
-        }
+        `${host}/accurate/api/report/sales-invoice-list.do`,
+        { headers, maxRedirects: 5 }
       );
 
       if (!response.data || !response.data.d) {
         // Fallback ke sales-invoice/list.do jika report API tidak ada
-        return await this.pullFakturPenjualan(host, session, token);
+        return await this.pullFakturPenjualan(host, headers);
       }
 
       const invoices: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
@@ -924,7 +782,7 @@ export class AccurateService {
     } catch (error: any) {
       logger.error('Failed to pull Daftar Faktur Penjualan:', error.response?.data || error.message);
       // Fallback to existing method
-      return await this.pullFakturPenjualan(host, session, token);
+      return await this.pullFakturPenjualan(host, headers);
     }
   }
 }

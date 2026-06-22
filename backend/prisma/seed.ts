@@ -55,15 +55,12 @@ async function main() {
   // 3. Create Settings
   await prisma.setting.createMany({
     data: [
-      { key: 'ACCURATE_CLIENT_ID', value: 'your_client_id' },
-      { key: 'ACCURATE_CLIENT_SECRET', value: 'your_client_secret' },
-      { key: 'ACCURATE_REDIRECT_URI', value: 'http://localhost:3000/settings' },
+      { key: 'ACCURATE_APP_KEY', value: '' },
+      { key: 'ACCURATE_SIGNATURE_SECRET', value: '' },
+      { key: 'ACCURATE_API_TOKEN', value: '' },
       { key: 'ACCURATE_DB_ID', value: '12345' },
       { key: 'ACCURATE_DB_NAME', value: 'PT. Maju Bersama' },
       { key: 'SYNC_INTERVAL_CRON', value: '0 */4 * * *' }, // every 4 hours
-      { key: 'ACCURATE_ACCESS_TOKEN', value: '' },
-      { key: 'ACCURATE_REFRESH_TOKEN', value: '' },
-      { key: 'ACCURATE_SESSION_ID', value: '' },
       { key: 'ACCURATE_SESSION_HOST', value: '' },
     ],
   });

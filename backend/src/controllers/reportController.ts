@@ -87,19 +87,18 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
   // ── LIVE ACCURATE MODE ───────────────────────────────────────────────────────
   try {
-    const accessToken = await AccurateService.getSetting('ACCURATE_ACCESS_TOKEN');
-    const session     = await AccurateService.getSetting('ACCURATE_SESSION_ID');
-    const host        = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
 
-    if (!accessToken || !session || !host) {
+    if (!host) {
       return res.status(401).json({
         message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
         code: 'NOT_CONNECTED',
       });
     }
 
+    const headers = await AccurateService.getApiTokenHeaders();
+
     const params: Record<string, string> = {
-      session,
       fields:   'number,transDate,customer,salesman,detailList',
       pageSize: String(limit),
       page:     String(page),
@@ -110,9 +109,9 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
     logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page}`);
 
-    const response = await axios.get(`${host}/api/sales-invoice/list.do`, {
+    const response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
       params,
-      headers: { 'Authorization': `Bearer ${accessToken}` },
+      headers,
       maxRedirects: 5,
     });
 

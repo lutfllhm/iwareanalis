@@ -78,38 +78,12 @@ router.get(
   syncController.getAuditLogs as any
 );
 
-router.get(
-  '/sync/connect',
-  authenticateToken as any,
-  requireRole(['admin', 'analyst']) as any,
-  syncController.getAccurateAuthUrl as any
-);
-
-router.get(
-  '/sync/callback',
-  syncController.handleOauthCallback as any
-);
-
-// Manual callback POST endpoint for when automatic redirect fails
+// Save & verify Accurate Online API Token credentials (App Key, Signature Secret, API Token)
 router.post(
-  '/sync/callback',
+  '/sync/connect-api-token',
   authenticateToken as any,
   requireRole(['admin', 'analyst']) as any,
-  syncController.handleManualOauthCallback as any
-);
-
-router.get(
-  '/sync/databases',
-  authenticateToken as any,
-  requireRole(['admin', 'analyst']) as any,
-  syncController.getAccurateDatabases as any
-);
-
-router.post(
-  '/sync/select-db',
-  authenticateToken as any,
-  requireRole(['admin', 'analyst']) as any,
-  syncController.selectAccurateDatabase as any
+  syncController.connectAccurateApiToken as any
 );
 
 // Settings

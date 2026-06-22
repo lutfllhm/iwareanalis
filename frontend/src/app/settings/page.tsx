@@ -1,28 +1,22 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import { Settings, Shield, User, RefreshCw, CheckCircle, XCircle, Key, QrCode, Download, ToggleLeft, ToggleRight, Database } from 'lucide-react';
 
-// Disable static generation for this page
-export const dynamic = 'force-dynamic';
-
-function SettingsContent() {
+export default function SettingsPage() {
   const queryClient = useQueryClient();
-  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'accurate' | 'security' | 'download'>('accurate');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // Accurate Form Settings
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
+  const [appKey, setAppKey] = useState('');
+  const [signatureSecret, setSignatureSecret] = useState('');
+  const [apiToken, setApiToken] = useState('');
   const [cronInterval, setCronInterval] = useState('0 */4 * * *');
-  const [selectedDb, setSelectedDb] = useState('');
-  const [selectedDbName, setSelectedDbName] = useState('');
-  const [databasesList, setDatabasesList] = useState<any[]>([]);
+  const [connectedDbName, setConnectedDbName] = useState('');
 
   // Password Form Settings
   const [newPassword, setNewPassword] = useState('');
@@ -75,35 +69,14 @@ function SettingsContent() {
     },
   });
 
-  // Handle redirect back from Accurate OAuth callback
-  useEffect(() => {
-    const connected = searchParams.get('accurate_connected');
-    const error = searchParams.get('accurate_error');
-
-    if (connected === 'true') {
-      setToast({ type: 'success', msg: 'Berhasil terhubung ke Accurate! Memuat daftar database...' });
-      // Auto-load database list
-      api.get('/sync/databases').then((res) => {
-        setDatabasesList(res.data || []);
-      }).catch(() => {
-        setToast({ type: 'error', msg: 'Terhubung ke Accurate, tapi gagal memuat daftar database.' });
-      });
-      // Clean URL
-      window.history.replaceState({}, '', '/settings');
-    } else if (error) {
-      setToast({ type: 'error', msg: `Gagal terhubung ke Accurate: ${decodeURIComponent(error)}` });
-      window.history.replaceState({}, '', '/settings');
-    }
-  }, [searchParams]);
-
   // Load fetched settings values into react state variables
   useEffect(() => {
     if (settingsData) {
-      setClientId(settingsData.ACCURATE_CLIENT_ID || '');
-      setClientSecret(settingsData.ACCURATE_CLIENT_SECRET || '');
+      setAppKey(settingsData.ACCURATE_APP_KEY || '');
+      setSignatureSecret(settingsData.ACCURATE_SIGNATURE_SECRET || '');
+      setApiToken(settingsData.ACCURATE_API_TOKEN || '');
       setCronInterval(settingsData.SYNC_INTERVAL_CRON || '0 */4 * * *');
-      setSelectedDb(settingsData.ACCURATE_DB_ID || '');
-      setSelectedDbName(settingsData.ACCURATE_DB_NAME || '');
+      setConnectedDbName(settingsData.ACCURATE_DB_NAME || '');
     }
     if (userProfile) {
       setTwoFaEnabled(userProfile.two_fa_enabled || false);
@@ -130,64 +103,24 @@ function SettingsContent() {
     },
   });
 
-  // Mutation to connect / authorize Accurate
-  const connectAccurateMutation = useMutation({
+  // Mutation to save & verify Accurate API Token credentials
+  const connectApiTokenMutation = useMutation({
     mutationFn: async () => {
-      // Step 1: Save keys to database first
-      await api.post('/settings/update', {
-        ACCURATE_CLIENT_ID: clientId,
-        ACCURATE_CLIENT_SECRET: clientSecret,
+      const res = await api.post('/sync/connect-api-token', {
+        appKey,
+        signatureSecret,
+        apiToken,
       });
-
-      // Step 2: Request auth connection url
-      const res = await api.get('/sync/connect');
       return res.data;
     },
     onSuccess: (data) => {
-      // Redirect to authorization URL in same window
-      if (data.authUrl) {
-        // Use same window instead of opening new tab for proper OAuth flow
-        window.location.href = data.authUrl;
-      }
-    },
-    onError: (err: any) => {
-      setToast({ type: 'error', msg: err.response?.data?.message || 'Koneksi gagal' });
-      setTimeout(() => setToast(null), 3000);
-    },
-  });
-
-  // Manual callback verification input code
-  const [oauthCallbackCode, setOauthCallbackCode] = useState('');
-  const callbackMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post('/sync/callback', { code: oauthCallbackCode });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToast({ type: 'success', msg: 'Berhasil terhubung ke Accurate!' });
-      setDatabasesList(data.databases || []);
-      setOauthCallbackCode('');
-      setTimeout(() => setToast(null), 3000);
-    },
-    onError: (err: any) => {
-      setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menukarkan kode OAuth' });
-      setTimeout(() => setToast(null), 3000);
-    },
-  });
-
-  // Select database company mutation
-  const selectDbMutation = useMutation({
-    mutationFn: async (payload: { dbId: string; dbName: string }) => {
-      const res = await api.post('/sync/select-db', payload);
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToast({ type: 'success', msg: data.message || 'Database berhasil dipilih' });
+      setToast({ type: 'success', msg: data.message || 'Berhasil terhubung ke Accurate!' });
+      setConnectedDbName(data.dbAlias || '');
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setTimeout(() => setToast(null), 3000);
     },
     onError: (err: any) => {
-      setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal memilih database' });
+      setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menghubungkan ke Accurate' });
       setTimeout(() => setToast(null), 3000);
     },
   });
@@ -366,95 +299,62 @@ function SettingsContent() {
             
             {/* Credentials Card */}
             <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
-              <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Kredensial API (OAuth2)</h3>
-              
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Kredensial API Token</h3>
+                {connectedDbName && (
+                  <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-xs font-bold rounded-full">
+                    Terhubung: {connectedDbName}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Dapatkan App Key dari Area Developer Accurate, lalu minta pengguna Accurate Online meng-install
+                aplikasi tersebut dan membuat API Token dari menu Accurate Store - API Token.
+              </p>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-muted-foreground">Client ID</label>
+                  <label className="text-xs font-bold text-muted-foreground">App Key</label>
                   <input
                     type="text"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="Masukkan Accurate Client ID"
+                    value={appKey}
+                    onChange={(e) => setAppKey(e.target.value)}
+                    placeholder="App Key dari Area Developer"
                     className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-muted-foreground">Client Secret</label>
+                  <label className="text-xs font-bold text-muted-foreground">Signature Secret</label>
                   <input
                     type="password"
-                    value={clientSecret}
-                    onChange={(e) => setClientSecret(e.target.value)}
+                    value={signatureSecret}
+                    onChange={(e) => setSignatureSecret(e.target.value)}
                     placeholder="••••••••••••••••"
                     className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
                   />
                 </div>
-              </div>
-
-              <div className="bg-muted/30 p-3 rounded-xl text-xs text-muted-foreground">
-                <strong>Redirect URI resmi aplikasi:</strong> <code>{`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5010'}/api/sync/callback`}</code>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                <button
-                  onClick={() => updateSettingsMutation.mutate({
-                    ACCURATE_CLIENT_ID: clientId,
-                    ACCURATE_CLIENT_SECRET: clientSecret,
-                  })}
-                  className="px-4 py-2.5 rounded-xl border border-border hover:bg-muted text-foreground text-sm font-semibold transition-colors"
-                >
-                  Simpan Kredensial
-                </button>
-
-                <button
-                  onClick={() => connectAccurateMutation.mutate()}
-                  className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity text-sm"
-                >
-                  Hubungkan dengan Accurate
-                </button>
-              </div>
-            </div>
-
-            {/* Oauth callback validation box */}
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
-              <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Verifikasi Callback Otorisasi</h3>
-              <p className="text-xs text-muted-foreground">Setelah menyetujui akses di tab Accurate, Anda akan diarahkan ke halaman setting ini kembali dengan parameter <code>?code=xxxx</code> di URL bar browser Anda. Salin parameter code tersebut dan verifikasi di bawah.</p>
-              
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  value={oauthCallbackCode}
-                  onChange={(e) => setOauthCallbackCode(e.target.value)}
-                  placeholder="Contoh: a818b2c8-5bd5-4277-bf30-..."
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm text-foreground focus:outline-none"
-                />
-                <button
-                  onClick={() => callbackMutation.mutate()}
-                  disabled={callbackMutation.isPending || !oauthCallbackCode}
-                  className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold shadow-md hover:bg-indigo-700 disabled:opacity-50 text-sm"
-                >
-                  Proses Token
-                </button>
-              </div>
-
-              {/* Mapped company lists */}
-              {databasesList.length > 0 && (
-                <div className="pt-4 border-t border-border space-y-3">
-                  <h4 className="text-xs font-bold text-foreground">Pilih Database Perusahaan Anda:</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {databasesList.map((db: any) => (
-                      <button
-                        key={db.id}
-                        onClick={() => selectDbMutation.mutate({ dbId: db.id, dbName: db.name })}
-                        className="p-3 text-left border border-border hover:border-primary/50 hover:bg-primary/5 rounded-xl transition-all"
-                      >
-                        <p className="text-sm font-bold text-foreground">{db.name}</p>
-                        <span className="text-[10px] text-muted-foreground">ID DB: {db.id}</span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-xs font-bold text-muted-foreground">API Token</label>
+                  <input
+                    type="password"
+                    value={apiToken}
+                    onChange={(e) => setApiToken(e.target.value)}
+                    placeholder="API Token yang dibuat pengguna Accurate Online"
+                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground"
+                  />
                 </div>
-              )}
+              </div>
+
+              <div className="flex items-center justify-end pt-2 border-t border-border/50">
+                <button
+                  onClick={() => connectApiTokenMutation.mutate()}
+                  disabled={connectApiTokenMutation.isPending || !appKey || !signatureSecret || !apiToken}
+                  className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg shadow-primary/20 hover:opacity-90 transition-opacity text-sm disabled:opacity-50"
+                >
+                  {connectApiTokenMutation.isPending ? 'Menghubungkan...' : 'Simpan & Hubungkan dengan Accurate'}
+                </button>
+              </div>
             </div>
 
             {/* Cron schedule Card */}
@@ -747,20 +647,5 @@ function SettingsContent() {
         )}
       </div>
     </DashboardLayout>
-  );
-}
-
-
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={
-      <DashboardLayout>
-        <div className="flex items-center justify-center p-8">
-          <div className="text-muted-foreground">Memuat pengaturan...</div>
-        </div>
-      </DashboardLayout>
-    }>
-      <SettingsContent />
-    </Suspense>
   );
 }

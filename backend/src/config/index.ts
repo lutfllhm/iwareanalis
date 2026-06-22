@@ -19,8 +19,5 @@ export const config = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   accurate: {
     mock: process.env.ACCURATE_MOCK === 'true',
-    clientId: process.env.ACCURATE_CLIENT_ID || '',
-    clientSecret: process.env.ACCURATE_CLIENT_SECRET || '',
-    redirectUri: process.env.ACCURATE_REDIRECT_URI || 'http://localhost:3000/settings',
   },
 };

@@ -42,9 +42,6 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       ACCURATE_MOCK: ${ACCURATE_MOCK:-true}
-      ACCURATE_CLIENT_ID: ${ACCURATE_CLIENT_ID}
-      ACCURATE_CLIENT_SECRET: ${ACCURATE_CLIENT_SECRET}
-      ACCURATE_REDIRECT_URI: ${ACCURATE_REDIRECT_URI}
     depends_on:
       dataanalis-db:
         condition: service_healthy
