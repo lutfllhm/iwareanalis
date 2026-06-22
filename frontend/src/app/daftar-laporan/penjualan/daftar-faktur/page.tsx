@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import {
@@ -32,7 +32,6 @@ import {
   CheckCircle,
   XCircle,
   Calendar,
-  Loader2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -46,11 +45,9 @@ interface FakturPenjualan {
   tanggal: string;
   total: number;
   pembayaran: number;
-  synced_at: string;
 }
 
 export default function DaftarFakturPenjualanPage() {
-  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,11 +57,11 @@ export default function DaftarFakturPenjualanPage() {
   const [endDate, setEndDate] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
-  // Fetch data
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['faktur-penjualan', page, limit, searchQuery, sortBy, sortOrder, startDate, endDate],
+  // Fetch data (live proxy ke Accurate)
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['daftar-faktur-penjualan', page, limit, searchQuery, sortBy, sortOrder, startDate, endDate],
     queryFn: async () => {
-      const res = await api.get('/data/faktur-penjualan', {
+      const res = await api.get('/report/daftar-faktur-penjualan', {
         params: {
           page,
           limit,
@@ -76,26 +73,6 @@ export default function DaftarFakturPenjualanPage() {
         },
       });
       return res.data;
-    },
-  });
-
-  // Sync mutation
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post('/sync/trigger', { moduleName: 'Faktur Penjualan' });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      setToast({ type: 'success', msg: `Sinkronisasi berhasil! ${data.count} data di-sync.` });
-      queryClient.invalidateQueries({ queryKey: ['faktur-penjualan'] });
-      setTimeout(() => setToast(null), 3000);
-    },
-    onError: (error: any) => {
-      setToast({
-        type: 'error',
-        msg: error.response?.data?.message || 'Sinkronisasi gagal',
-      });
-      setTimeout(() => setToast(null), 3000);
     },
   });
 
@@ -163,20 +140,6 @@ export default function DaftarFakturPenjualanPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              className="flex items-center space-x-2"
-            >
-              {syncMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              <span>Sync</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               onClick={() => refetch()}
               className="flex items-center space-x-2"
             >
@@ -194,6 +157,16 @@ export default function DaftarFakturPenjualanPage() {
             </Button>
           </div>
         </div>
+
+        {/* Error state */}
+        {isError && (
+          <div className="p-4 rounded-xl border bg-rose-500/10 border-rose-500/20 text-rose-600 flex items-center space-x-3 shadow-md">
+            <XCircle size={20} />
+            <span className="text-sm font-semibold">
+              {(error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate'}
+            </span>
+          </div>
+        )}
 
         {/* Toast Notification */}
         {toast && (

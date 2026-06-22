@@ -192,3 +192,176 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     });
   }
 }
+
+/**
+ * GET /report/daftar-faktur-penjualan
+ *
+ * Live proxy langsung ke Accurate API /api/sales-invoice/list.do
+ */
+export async function getDaftarFakturPenjualan(req: AuthenticatedRequest, res: Response) {
+  const startDate = req.query.startDate as string || '';
+  const endDate   = req.query.endDate   as string || '';
+  const q         = req.query.q         as string || '';
+  const page      = parseInt(req.query.page  as string || '1',  10);
+  const limit     = parseInt(req.query.limit as string || '10', 10);
+
+  try {
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      return res.status(401).json({
+        message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
+        code: 'NOT_CONNECTED',
+      });
+    }
+
+    const headers = await AccurateService.getApiTokenHeaders();
+
+    const params: Record<string, string> = {
+      fields:   'number,transDate,customer,salesman,totalAmount,paymentAmount',
+      pageSize: String(limit),
+      page:     String(page),
+    };
+    if (startDate) params.startDate = startDate;
+    if (endDate)   params.endDate   = endDate;
+    if (q)         params.keywords  = q;
+
+    const response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
+      params,
+      headers,
+      maxRedirects: 5,
+    });
+
+    if (!response.data || !response.data.s) {
+      const errMsg = response.data?.d || response.data?.message || 'Response tidak valid dari Accurate';
+      logger.error('Accurate API error (daftar-faktur):', errMsg);
+      return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
+    }
+
+    const invoices: any[] = response.data.d || [];
+    const sp = response.data.sp || {};
+
+    const rows = invoices.map((inv) => ({
+      id: inv.id,
+      nomor: inv.number,
+      id_pelanggan: inv.customer?.customerNo || '',
+      nama_pelanggan: inv.customer?.name || '',
+      id_karyawan_penjual_utama: inv.salesman?.salesNo || '',
+      tanggal: inv.transDate,
+      total: inv.totalAmount || 0,
+      pembayaran: inv.paymentAmount || 0,
+    }));
+
+    return res.status(200).json({
+      data: rows,
+      pagination: {
+        page,
+        limit:      sp.pageSize  || limit,
+        total:      sp.rowCount  || rows.length,
+        totalPages: sp.pageCount || 1,
+      },
+      source: 'accurate',
+    });
+  } catch (error: any) {
+    const status = error.response?.status;
+    const msg    = error.response?.data?.d || error.response?.data?.message || error.message;
+
+    if (status === 401) {
+      return res.status(401).json({
+        message: 'Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan.',
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    logger.error('Gagal fetch daftar faktur penjualan dari Accurate:', msg);
+    return res.status(502).json({
+      message: `Gagal mengambil data dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
+    });
+  }
+}
+
+/**
+ * GET /report/daftar-retur-penjualan
+ *
+ * Live proxy langsung ke Accurate API /api/sales-return/list.do
+ */
+export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Response) {
+  const startDate = req.query.startDate as string || '';
+  const endDate   = req.query.endDate   as string || '';
+  const q         = req.query.q         as string || '';
+  const page      = parseInt(req.query.page  as string || '1',  10);
+  const limit     = parseInt(req.query.limit as string || '10', 10);
+
+  try {
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      return res.status(401).json({
+        message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
+        code: 'NOT_CONNECTED',
+      });
+    }
+
+    const headers = await AccurateService.getApiTokenHeaders();
+
+    const params: Record<string, string> = {
+      fields:   'number,transDate,customer,salesman,totalAmount',
+      pageSize: String(limit),
+      page:     String(page),
+    };
+    if (startDate) params.startDate = startDate;
+    if (endDate)   params.endDate   = endDate;
+    if (q)         params.keywords  = q;
+
+    const response = await axios.get(`${host}/accurate/api/sales-return/list.do`, {
+      params,
+      headers,
+      maxRedirects: 5,
+    });
+
+    if (!response.data || !response.data.s) {
+      const errMsg = response.data?.d || response.data?.message || 'Response tidak valid dari Accurate';
+      logger.error('Accurate API error (daftar-retur):', errMsg);
+      return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
+    }
+
+    const returns: any[] = response.data.d || [];
+    const sp = response.data.sp || {};
+
+    const rows = returns.map((ret) => ({
+      id: ret.id,
+      nomor: ret.number,
+      id_pelanggan: ret.customer?.customerNo || '',
+      nama_pelanggan: ret.customer?.name || '',
+      id_karyawan_penjual_utama: ret.salesman?.salesNo || '',
+      tanggal: ret.transDate,
+      total: ret.totalAmount || 0,
+      pembayaran_faktur_penjualan: ret.totalAmount || 0,
+      nilai_retur_faktur: ret.totalAmount || 0,
+    }));
+
+    return res.status(200).json({
+      data: rows,
+      pagination: {
+        page,
+        limit:      sp.pageSize  || limit,
+        total:      sp.rowCount  || rows.length,
+        totalPages: sp.pageCount || 1,
+      },
+      source: 'accurate',
+    });
+  } catch (error: any) {
+    const status = error.response?.status;
+    const msg    = error.response?.data?.d || error.response?.data?.message || error.message;
+
+    if (status === 401) {
+      return res.status(401).json({
+        message: 'Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan.',
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    logger.error('Gagal fetch daftar retur penjualan dari Accurate:', msg);
+    return res.status(502).json({
+      message: `Gagal mengambil data dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
+    });
+  }
+}

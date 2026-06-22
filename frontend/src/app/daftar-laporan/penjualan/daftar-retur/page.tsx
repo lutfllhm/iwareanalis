@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import DataTable, { Column } from '@/components/DataTable';
 import api from '@/lib/api';
-import { RefreshCw, CheckCircle, XCircle, Download } from 'lucide-react';
+import { CheckCircle, XCircle, Download } from 'lucide-react';
 import { useDownload } from '@/hooks/useDownload';
 
 interface ReturPenjualanRow {
@@ -18,11 +18,9 @@ interface ReturPenjualanRow {
   total: string;
   pembayaran_faktur_penjualan: string;
   nilai_retur_faktur: string;
-  synced_at: string;
 }
 
 export default function ReturPenjualanPage() {
-  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [q, setQ] = useState('');
@@ -38,33 +36,16 @@ export default function ReturPenjualanPage() {
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
-  // Fetch returns list
-  const { data, isLoading, isPlaceholderData } = useQuery({
-    queryKey: ['returPenjualan', page, limit, q, sortBy, sortOrder, startDate, endDate],
+  // Fetch returns list (live proxy ke Accurate)
+  const { data, isLoading, isPlaceholderData, isError, error } = useQuery({
+    queryKey: ['daftar-retur-penjualan', page, limit, q, sortBy, sortOrder, startDate, endDate],
     queryFn: async () => {
-      const res = await api.get('/data/retur-penjualan', {
+      const res = await api.get('/report/daftar-retur-penjualan', {
         params: { page, limit, q, sortBy, sortOrder, startDate, endDate },
       });
       return res.data;
     },
     placeholderData: (previousData) => previousData,
-  });
-
-  // Trigger manual sync
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post('/sync/trigger', { moduleName: 'Retur Penjualan' });
-      return res.data;
-    },
-    onSuccess: (resData) => {
-      setToast({ type: 'success', msg: `Sinkronisasi retur berhasil: ${resData.count} data diperbarui` });
-      queryClient.invalidateQueries({ queryKey: ['returPenjualan'] });
-      setTimeout(() => setToast(null), 4000);
-    },
-    onError: (err: any) => {
-      setToast({ type: 'error', msg: err.response?.data?.message || err.message || 'Sinkronisasi gagal' });
-      setTimeout(() => setToast(null), 4000);
-    },
   });
 
   const formatRupiah = (val: string) => {
@@ -110,10 +91,6 @@ export default function ReturPenjualanPage() {
     },
   ];
 
-  const lastSyncTime = data?.data?.[0]?.synced_at 
-    ? new Date(data.data[0].synced_at).toLocaleString('id-ID') 
-    : 'Belum pernah';
-
   return (
     <DashboardLayout>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -125,10 +102,6 @@ export default function ReturPenjualanPage() {
         </div>
 
         <div className="flex items-center space-x-3.5">
-          <div className="text-right hidden sm:block">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground">Sync Terakhir</p>
-            <p className="text-xs font-semibold text-foreground">{lastSyncTime}</p>
-          </div>
           {canDownload && (
             <button
               onClick={() => handleDownload(
@@ -142,16 +115,17 @@ export default function ReturPenjualanPage() {
               <span>{isDownloading ? 'Mengunduh...' : 'Unduh Semua'}</span>
             </button>
           )}
-          <button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold shadow-lg shadow-primary/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
-          >
-            <RefreshCw size={15} className={syncMutation.isPending ? 'animate-spin' : ''} />
-            <span>{syncMutation.isPending ? 'Mensinkronkan...' : 'Sync dari Accurate'}</span>
-          </button>
         </div>
       </div>
+
+      {isError && (
+        <div className="p-4 rounded-xl border bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center space-x-3 shadow-md">
+          <XCircle size={20} />
+          <span className="text-sm font-semibold">
+            {(error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate'}
+          </span>
+        </div>
+      )}
 
       {toast && (
         <div className={`p-4 rounded-xl border flex items-center space-x-3 shadow-md ${

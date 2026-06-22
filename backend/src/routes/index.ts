@@ -151,6 +151,18 @@ router.get(
   reportController.getRincianPenjualanPerBarang as any
 );
 
+router.get(
+  '/report/daftar-faktur-penjualan',
+  authenticateToken as any,
+  reportController.getDaftarFakturPenjualan as any
+);
+
+router.get(
+  '/report/daftar-retur-penjualan',
+  authenticateToken as any,
+  reportController.getDaftarReturPenjualan as any
+);
+
 
 // ==========================================
 // 6. USER MANAGEMENT ROUTES (Admin only)
