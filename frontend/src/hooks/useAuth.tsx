@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user && !isPublic) {
       router.push('/login');
     } else if (user && isPublic) {
-      router.push('/dashboard');
+      router.push('/daftar-laporan/penjualan/daftar-faktur');
     }
   }, [user, loading, pathname, router]);
 
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setAccessToken(res.data.accessToken);
       setUser(res.data.user);
-      router.push('/dashboard');
+      router.push('/daftar-laporan/penjualan/daftar-faktur');
       return { message: res.data.message };
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Login gagal, periksa email & password Anda');
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.post('/auth/verify-2fa', { userId, code });
       setAccessToken(res.data.accessToken);
       setUser(res.data.user);
-      router.push('/dashboard');
+      router.push('/daftar-laporan/penjualan/daftar-faktur');
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Kode OTP salah atau kedaluwarsa');
     }

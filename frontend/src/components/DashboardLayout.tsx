@@ -5,12 +5,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
 import {
-  LayoutDashboard,
   Package,
-  Users,
-  FileSpreadsheet,
-  TrendingUp,
-  Settings,
+  FileText,
+  RotateCcw,
   LogOut,
   Menu,
   ChevronLeft,
@@ -20,8 +17,6 @@ import {
   User as UserIcon,
   Bell,
   RefreshCw,
-  UserCheck,
-  BookOpen
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -32,13 +27,9 @@ interface SidebarItem {
 }
 
 const sidebarItems: SidebarItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Daftar Barang & Jasa', href: '/barang-jasa', icon: Package },
-  { name: 'Daftar Pelanggan', href: '/pelanggan', icon: Users },
-  { name: 'Daftar Laporan Penjualan', href: '/daftar-laporan/penjualan', icon: FileSpreadsheet },
-  { name: 'Laporan Data Analyst', href: '/laporan', icon: TrendingUp },
-  { name: 'Manajemen User', href: '/users-management', icon: UserCheck, roles: ['admin'] },
-  { name: 'Pengaturan', href: '/settings', icon: Settings },
+  { name: 'Rincian Penjualan per Barang', href: '/daftar-laporan/rincian-penjualan-per-barang', icon: Package },
+  { name: 'Daftar Retur Penjualan', href: '/daftar-laporan/penjualan/daftar-retur', icon: RotateCcw },
+  { name: 'Daftar Faktur Penjualan', href: '/daftar-laporan/penjualan/daftar-faktur', icon: FileText },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

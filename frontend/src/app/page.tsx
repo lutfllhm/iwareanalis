@@ -12,7 +12,7 @@ export default function IndexPage() {
   useEffect(() => {
     if (!loading) {
       if (user) {
-        router.replace('/dashboard');
+        router.replace('/daftar-laporan/penjualan/daftar-faktur');
       } else {
         router.replace('/login');
       }
