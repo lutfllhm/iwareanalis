@@ -99,17 +99,16 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     const headers = await AccurateService.getApiTokenHeaders();
 
     const params: Record<string, string> = {
-      fields:   'number,transDate,customer,salesman,detailList',
       pageSize: String(limit),
       page:     String(page),
     };
 
-    if (startDate) params.startDate = startDate;
-    if (endDate)   params.endDate   = endDate;
+    if (startDate) params.fromDate = startDate;
+    if (endDate)   params.toDate   = endDate;
 
-    logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page}`);
+    logger.info(`Fetch Accurate report/get-sales-per-item.do host=${host} page=${page}`);
 
-    const response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
+    const response = await axios.get(`${host}/accurate/api/report/get-sales-per-item.do`, {
       params,
       headers,
       maxRedirects: 5,
@@ -121,44 +120,38 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
     }
 
-    const invoices: any[] = response.data.d || [];
+    const items: any[] = response.data.d || [];
     const sp = response.data.sp || {};
     const rows: any[] = [];
 
-    for (const inv of invoices) {
-      for (const line of (inv.detailList || [])) {
-        const namaBarang = line.item?.name  || line.itemName || '';
-        const kodeBarang = line.item?.no    || line.itemNo   || '';
+    for (const item of items) {
+      const namaBarang = item.itemName || item.name || '';
+      const kodeBarang = item.itemNo   || item.no   || '';
 
+      for (const line of (item.detail || item.transactions || [])) {
         if (q) {
           const s = q.toLowerCase();
           const hit =
             namaBarang.toLowerCase().includes(s) ||
             kodeBarang.toLowerCase().includes(s) ||
-            (inv.number         || '').toLowerCase().includes(s) ||
-            (inv.customer?.name || '').toLowerCase().includes(s) ||
-            (inv.salesman?.name || '').toLowerCase().includes(s);
+            (line.number      || '').toLowerCase().includes(s) ||
+            (line.description || '').toLowerCase().includes(s);
           if (!hit) continue;
         }
 
-        const kuantitas   = line.quantity      || 0;
-        const hargaSatuan = line.unitPrice      || line.basePrice || 0;
-        const diskon      = line.discountAmount || 0;
-        const totalHarga  = line.amount         || (kuantitas * hargaSatuan - diskon);
-
         rows.push({
-          nomorFaktur:    inv.number,
-          tanggal:        inv.transDate,
+          nomorFaktur:    line.number,
+          tanggal:        line.transDate || line.date,
           kodeBarang,
           namaBarang,
-          kategoriBarang: line.item?.itemCategory?.name || '',
-          namaCustomer:   inv.customer?.name || '',
-          namaSalesman:   inv.salesman?.name || '',
-          kuantitas,
-          satuan:         line.unit?.name || line.unitName || 'Unit',
-          hargaSatuan,
-          diskon,
-          totalHarga,
+          kategoriBarang: item.itemCategory || '',
+          namaCustomer:   line.description || '',
+          namaSalesman:   '',
+          kuantitas:      line.quantity || 0,
+          satuan:         line.unit || 'Unit',
+          hargaSatuan:    0,
+          diskon:         0,
+          totalHarga:     line.amount || 0,
         });
       }
     }
@@ -217,15 +210,14 @@ export async function getDaftarFakturPenjualan(req: AuthenticatedRequest, res: R
     const headers = await AccurateService.getApiTokenHeaders();
 
     const params: Record<string, string> = {
-      fields:   'number,transDate,customer,salesman,totalAmount,paymentAmount',
       pageSize: String(limit),
       page:     String(page),
     };
-    if (startDate) params.startDate = startDate;
-    if (endDate)   params.endDate   = endDate;
-    if (q)         params.keywords  = q;
+    if (startDate) params.fromDate = startDate;
+    if (endDate)   params.toDate   = endDate;
+    if (q)         params.keywords = q;
 
-    const response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
+    const response = await axios.get(`${host}/accurate/api/report/sales-invoice-list.do`, {
       params,
       headers,
       maxRedirects: 5,
@@ -242,13 +234,13 @@ export async function getDaftarFakturPenjualan(req: AuthenticatedRequest, res: R
 
     const rows = invoices.map((inv) => ({
       id: inv.id,
-      nomor: inv.number,
-      id_pelanggan: inv.customer?.customerNo || '',
-      nama_pelanggan: inv.customer?.name || '',
-      id_karyawan_penjual_utama: inv.salesman?.salesNo || '',
-      tanggal: inv.transDate,
-      total: inv.totalAmount || 0,
-      pembayaran: inv.paymentAmount || 0,
+      nomor: inv.number || inv.invoiceNumber,
+      id_pelanggan: inv.customerNo || '',
+      nama_pelanggan: inv.customerName || '',
+      id_karyawan_penjual_utama: inv.salesmanNo || '',
+      tanggal: inv.transDate || inv.date,
+      total: inv.totalAmount || inv.total || 0,
+      pembayaran: inv.paidAmount || inv.paid || 0,
     }));
 
     return res.status(200).json({
@@ -303,15 +295,14 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
     const headers = await AccurateService.getApiTokenHeaders();
 
     const params: Record<string, string> = {
-      fields:   'number,transDate,customer,salesman,totalAmount',
       pageSize: String(limit),
       page:     String(page),
     };
-    if (startDate) params.startDate = startDate;
-    if (endDate)   params.endDate   = endDate;
-    if (q)         params.keywords  = q;
+    if (startDate) params.fromDate = startDate;
+    if (endDate)   params.toDate   = endDate;
+    if (q)         params.keywords = q;
 
-    const response = await axios.get(`${host}/accurate/api/sales-return/list.do`, {
+    const response = await axios.get(`${host}/accurate/api/report/sales-return-list.do`, {
       params,
       headers,
       maxRedirects: 5,
@@ -328,14 +319,14 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
 
     const rows = returns.map((ret) => ({
       id: ret.id,
-      nomor: ret.number,
-      id_pelanggan: ret.customer?.customerNo || '',
-      nama_pelanggan: ret.customer?.name || '',
-      id_karyawan_penjual_utama: ret.salesman?.salesNo || '',
-      tanggal: ret.transDate,
-      total: ret.totalAmount || 0,
-      pembayaran_faktur_penjualan: ret.totalAmount || 0,
-      nilai_retur_faktur: ret.totalAmount || 0,
+      nomor: ret.number || ret.returnNumber,
+      id_pelanggan: ret.customerNo || '',
+      nama_pelanggan: ret.customerName || '',
+      id_karyawan_penjual_utama: ret.salesmanNo || '',
+      tanggal: ret.transDate || ret.date,
+      total: ret.totalAmount || ret.total || 0,
+      pembayaran_faktur_penjualan: ret.totalAmount || ret.total || 0,
+      nilai_retur_faktur: ret.totalAmount || ret.total || 0,
     }));
 
     return res.status(200).json({
