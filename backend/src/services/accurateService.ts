@@ -111,7 +111,7 @@ export class AccurateService {
         throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'API Token tidak valid');
       }
 
-      const dataUsaha = response.data.d?.['data usaha'] || response.data.d?.dataUsaha;
+      const dataUsaha = response.data.d?.database || response.data.d?.['data usaha'] || response.data.d?.dataUsaha;
       const host = dataUsaha?.host;
       const dbId = dataUsaha?.id;
       const dbAlias = dataUsaha?.alias;
