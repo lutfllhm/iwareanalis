@@ -6,8 +6,9 @@ import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import {
   FileText, Calendar, Search, ChevronLeft, ChevronRight,
-  AlertCircle, Loader2, ShoppingBag
+  AlertCircle, Loader2, ShoppingBag, Settings
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface RincianRow {
   nomorFaktur: string;
@@ -41,6 +42,7 @@ const formatTanggal = (val: string) => {
 };
 
 export default function RincianPenjualanPerBarangPage() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [q, setQ] = useState('');
@@ -76,6 +78,7 @@ export default function RincianPenjualanPerBarangPage() {
   const totalRows = rows.length;
   const grandTotal = rows.reduce((sum, r) => sum + (r.totalHarga || 0), 0);
 
+  const errorCode = (error as any)?.response?.data?.code;
   const errorMsg = (error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate';
 
   return (
@@ -163,6 +166,15 @@ export default function RincianPenjualanPerBarangPage() {
           <div className="flex-1">
             <p className="font-bold text-rose-600 dark:text-rose-400 text-sm">Gagal Memuat Data</p>
             <p className="text-sm text-rose-600/80 dark:text-rose-400/80 mt-1">{errorMsg}</p>
+            {(errorCode === 'NOT_CONNECTED' || errorCode === 'TOKEN_EXPIRED') && (
+              <button
+                onClick={() => router.push('/settings')}
+                className="mt-3 flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors"
+              >
+                <Settings size={13} />
+                Buka Pengaturan Accurate
+              </button>
+            )}
           </div>
         </div>
       )}
