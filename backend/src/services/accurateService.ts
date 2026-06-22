@@ -102,8 +102,11 @@ export class AccurateService {
         { headers, maxRedirects: 5 }
       );
 
+      logger.info(`Accurate /api/api-token.do raw response: ${JSON.stringify(response.data)}`);
+
       if (!response.data || !response.data.s) {
-        throw new Error(response.data?.d || response.data?.message || 'API Token tidak valid');
+        const detail = response.data?.d || response.data?.message;
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'API Token tidak valid');
       }
 
       const dataUsaha = response.data.d?.['data usaha'] || response.data.d?.dataUsaha;
@@ -112,7 +115,7 @@ export class AccurateService {
       const dbAlias = dataUsaha?.alias;
 
       if (!host) {
-        throw new Error('Response Accurate tidak menyertakan host Data Usaha');
+        throw new Error(`Response Accurate tidak menyertakan host Data Usaha: ${JSON.stringify(response.data.d)}`);
       }
 
       await this.saveSetting('ACCURATE_SESSION_HOST', host);
@@ -122,8 +125,10 @@ export class AccurateService {
       logger.info(`Accurate API Token verified: host=${host}, db=${dbAlias}`);
       return { host, dbAlias, dbId };
     } catch (error: any) {
-      logger.error('Failed to verify API Token:', error.response?.data || error.message);
-      throw new Error(error.response?.data?.d || 'Gagal memverifikasi API Token');
+      const accurateError = error.response?.data;
+      const detail = accurateError?.d || accurateError?.message || error.message;
+      logger.error('Failed to verify API Token:', accurateError || error.message);
+      throw new Error(typeof detail === 'string' ? detail : (error.message || 'Gagal memverifikasi API Token'));
     }
   }
 
