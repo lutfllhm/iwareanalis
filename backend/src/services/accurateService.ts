@@ -114,7 +114,7 @@ export class AccurateService {
       const dataUsaha = response.data.d?.database || response.data.d?.['data usaha'] || response.data.d?.dataUsaha;
       const host = dataUsaha?.host;
       const dbId = dataUsaha?.id;
-      const dbAlias = dataUsaha?.alias;
+      const dbAlias = dataUsaha?.alias || dataUsaha?.name || dataUsaha?.databaseAlias;
 
       if (!host) {
         throw new Error(`Response Accurate tidak menyertakan host Data Usaha: ${JSON.stringify(response.data.d)}`);

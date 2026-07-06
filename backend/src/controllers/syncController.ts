@@ -205,7 +205,7 @@ export async function connectAccurateApiToken(req: AuthenticatedRequest, res: Re
         user_id: req.user?.id,
         user_email: req.user?.email,
         aksi: 'ACCURATE_CONNECT_API_TOKEN',
-        target: result.dbAlias,
+        target: result.dbAlias || 'Accurate Online',
         ip_address: req.ip,
         user_agent: req.headers['user-agent'] || '',
       },
