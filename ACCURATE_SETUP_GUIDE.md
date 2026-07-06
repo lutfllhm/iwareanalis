@@ -1,396 +1,105 @@
-# 🚀 PANDUAN LENGKAP SETUP ACCURATE ONLINE INTEGRATION
+# 🚀 PANDUAN LENGKAP SETUP INTEGRASI ACCURATE ONLINE
 
-## ❌ Error yang Terjadi:
-```
-Ada Permasalahan
-- Client ID yang digunakan tidak tepat
-- URL redirect yang digunakan tidak sesuai dengan yang didaftarkan
-- Scope otorisasi yang diajukan tidak tepat
-```
-
-## ✅ SOLUSI: Buat Aplikasi Baru di Accurate Developer Console
+Aplikasi ini terhubung ke Accurate Online menggunakan skema resmi **API Token**
+(App Key + Signature Secret + API Token), sesuai dokumentasi
+`Integrasi API Accurate Online dengan API Token v1.0.3`. Skema ini **bukan**
+OAuth (tidak ada Client ID/Client Secret/redirect URI/scope authorize).
 
 ---
 
-## 📋 STEP 1: Login ke Accurate Developer Console
+## 📋 STEP 1: Buat Aplikasi Developer & Dapatkan App Key
 
-1. Buka browser dan kunjungi: **https://developer.accurate.id/**
-2. Klik tombol **"Login"** atau **"Masuk"**
-3. Login menggunakan:
-   - **Email Accurate Online** Anda
-   - **Password Accurate Online** Anda
-4. Jika belum punya akun Developer, daftar dulu dengan akun Accurate Online Anda
+1. Buka **https://developer.accurate.id/** dan login dengan akun Accurate Online.
+2. Buat aplikasi baru (atau gunakan aplikasi yang sudah ada) di Area Developer.
+3. Catat **App Key** aplikasi tersebut — nilai ini yang dimasukkan di halaman
+   Pengaturan aplikasi ini (field "App Key").
 
 ---
 
-## 📋 STEP 2: Buat Aplikasi Baru
+## 📋 STEP 2: Install Aplikasi ke Data Usaha Accurate
 
-### **A. Akses Menu Aplikasi**
-1. Setelah login, Anda akan masuk ke **Dashboard Developer**
-2. Klik menu **"My Applications"** atau **"Aplikasi Saya"** di sidebar
-3. Klik tombol **"Create New Application"** atau **"Buat Aplikasi Baru"**
+1. Login ke **https://accurate.id** dengan akun yang punya akses ke Data Usaha
+   yang ingin diintegrasikan, lalu masuk ke Data Usaha tersebut.
+2. Buka menu **Pengaturan → Accurate Store → Aplikasi Saya**.
+3. Klik **Install Aplikasi**, lalu masukkan **App Key** dari Step 1.
+4. Setujui syarat & ketentuan/biaya (jika ada), klik **Install**.
 
-### **B. Isi Form Aplikasi**
-
-Isi form dengan data PERSIS seperti dibawah ini:
-
-#### **Basic Information:**
-
-```
-Application Name: 
-DataAnalis Dashboard
-
-Application Description:
-Dashboard analytics platform for sales data analysis integrated with Accurate Online
-
-Application Type:
-Web Application
-
-Application Logo: (optional)
-[Upload logo jika ada]
-```
-
-#### **OAuth Configuration:**
-
-**⚠️ BAGIAN INI SANGAT PENTING - HARUS EXACT!**
-
-```
-Authorization Callback URLs / Redirect URIs:
-https://analys.iwareid.com/settings
-```
-
-**❗ PENTING untuk Redirect URI:**
-- ✅ Harus HTTPS (bukan HTTP)
-- ✅ Harus lowercase semua
-- ✅ Tidak ada trailing slash di akhir (/)
-- ✅ Tidak ada spasi
-- ✅ Exact match: `https://analys.iwareid.com/settings`
-
-**❌ SALAH:**
-```
-http://analys.iwareid.com/settings     ← HTTP (bukan HTTPS)
-https://analys.iwareid.com/settings/   ← Ada trailing slash
-https://Analys.iwareid.com/settings    ← Huruf kapital
-https://analys.iwareid.com /settings   ← Ada spasi
-```
-
-**✅ BENAR:**
-```
-https://analys.iwareid.com/settings
-```
-
-#### **Scopes / Permissions:**
-
-Centang SEMUA 7 scope berikut:
-
-```
-☑ item_read              → Membaca data barang/jasa
-☑ customer_read          → Membaca data pelanggan
-☑ sales_invoice_read     → Membaca faktur penjualan
-☑ sales_return_read      → Membaca retur penjualan
-☑ report_view            → Mengakses laporan (PENTING!)
-☑ work_order_read        → Membaca work order
-☑ stock_mutation_read    → Membaca mutasi stok
-```
-
-**⚠️ CATATAN:** Scope `report_view` SANGAT PENTING untuk mengakses laporan detail penjualan!
-
-### **C. Save Aplikasi**
-
-1. Setelah semua form diisi, klik tombol **"Save"** atau **"Simpan"**
-2. Aplikasi akan dibuat dengan status **"Active"**
-3. Pastikan status aplikasi: **Active** (bukan Draft)
+> Hanya user dengan Hak Akses **Administrator** pada Data Usaha yang bisa
+> melakukan Install Aplikasi.
 
 ---
 
-## 📋 STEP 3: Copy Credentials
+## 📋 STEP 3: Buat API Token
 
-Setelah aplikasi berhasil dibuat, Anda akan melihat:
+1. Masih di **Pengaturan → Accurate Store**, buka tab **API Token**.
+2. Klik **Buat API Token**, pilih aplikasi yang sudah di-install pada Step 2.
+3. Centang **"Saya telah Membaca dan Setuju dengan Syarat dan Ketentuan API Token"**,
+   lalu klik **Buat Token**.
+4. Salin nilai **API Token** yang ditampilkan (JWT panjang, hanya tampil di sini).
 
-```
-═══════════════════════════════════════
-APPLICATION CREDENTIALS
-═══════════════════════════════════════
-
-Client ID:
-abc12345-6789-0def-ghij-klmnopqrstuv
-[Copy] 
-
-Client Secret:
-1234567890abcdefghij1234567890ab
-[Copy] [Show/Hide]
-═══════════════════════════════════════
-```
-
-**PENTING:**
-1. **Copy Client ID** - Klik tombol Copy atau select & Ctrl+C
-2. **Copy Client Secret** - Klik "Show" dulu jika tersembunyi, lalu copy
-
-⚠️ **Simpan credentials ini dengan aman!** Client Secret hanya ditampilkan sekali.
+> User dengan Hak Akses **Administrator** maupun **Operator** dapat membuat
+> API Token, dan bisa berbeda dengan user yang melakukan Install Aplikasi.
+> Satu user hanya bisa punya satu API Token aktif per aplikasi per Data Usaha.
 
 ---
 
-## 📋 STEP 4: Update Credentials di VPS
+## 📋 STEP 4: Dapatkan Signature Secret
 
-Sekarang kita update credentials baru di server.
+**Signature Secret** adalah App Secret dari aplikasi Developer yang dibuat di
+Step 1 (dipakai untuk menandatangani header `X-Api-Signature` dengan
+HMAC-SHA256). Ambil nilai ini dari halaman detail aplikasi di
+**https://developer.accurate.id/**, di sebelah App Key.
 
-### **Opsi A: Menggunakan Script Otomatis (RECOMMENDED)**
-
-SSH ke VPS dan jalankan script:
-
-```bash
-ssh root@145.79.8.148
-
-# Jalankan script update
-sudo /usr/local/bin/update-env-accurate.sh <CLIENT_ID_BARU> <CLIENT_SECRET_BARU>
-```
-
-**Contoh:**
-```bash
-sudo /usr/local/bin/update-env-accurate.sh abc12345-6789-0def-ghij-klmnopqrstuv 1234567890abcdefghij1234567890ab
-```
-
-Script akan otomatis:
-- ✅ Update file `.env`
-- ✅ Restart backend container
-- ✅ Tampilkan konfigurasi baru
-
-### **Opsi B: Manual Edit**
-
-Jika script tidak ada atau ingin manual:
-
-```bash
-# 1. SSH ke VPS
-ssh root@145.79.8.148
-
-# 2. Edit file .env
-cd /opt/analis
-nano .env
-
-# 3. Update baris berikut dengan credentials BARU:
-ACCURATE_CLIENT_ID=<paste_client_id_baru_disini>
-ACCURATE_CLIENT_SECRET=<paste_client_secret_baru_disini>
-
-# 4. Save file (Ctrl+O, Enter, Ctrl+X)
-
-# 5. Restart backend container
-docker compose restart dataanalis-backend
-
-# 6. Verifikasi
-cat .env | grep ACCURATE
-```
+⚠️ Jangan gunakan Client Secret dari skema OAuth lama — App Key/Signature
+Secret dan Client ID/Client Secret adalah pasangan kredensial yang berbeda.
 
 ---
 
-## 📋 STEP 5: Test Integrasi
+## 📋 STEP 5: Masukkan Kredensial di Aplikasi Ini
 
-Sekarang test OAuth flow:
+1. Buka aplikasi ini, login sebagai admin.
+2. Buka menu **Pengaturan** → tab **Koneksi Accurate Online**.
+3. Isi 3 field berikut persis dari Step 1–4:
+   - **App Key**
+   - **Signature Secret**
+   - **API Token**
+4. Klik **Simpan & Hubungkan dengan Accurate**.
 
-### **A. Akses Aplikasi**
-1. Buka browser: **https://analys.iwareid.com**
-2. Login dengan:
-   - Email: `admin@iware.id`
-   - Password: `jasad666`
+Jika berhasil, akan muncul notifikasi "Berhasil terhubung ke Accurate Online
+(<nama Data Usaha>)" dan badge **Terhubung: <nama Data Usaha>** akan tampil.
+Backend otomatis menyimpan host API dinamis (mis. `https://zeus.accurate.id`)
+hasil respons `/api/api-token.do` — Anda tidak perlu mengisi host secara manual.
 
-### **B. Koneksi ke Accurate**
-1. Klik menu **"Settings"** di sidebar kiri
-2. Tab **"Integrasi Accurate Online"** akan terbuka
-3. Klik tombol **"Hubungkan ke Accurate"**
+### Test Koneksi
 
-### **C. Authorize Aplikasi**
-1. Anda akan diredirect ke **Accurate OAuth Page**
-2. **Login** dengan akun Accurate Online Anda (jika belum login)
-3. Anda akan melihat halaman **"Berikan Izin"** dengan daftar permissions
-4. Klik tombol **"Izinkan"** atau **"Allow"**
-
-### **D. Verifikasi Berhasil**
-Setelah klik "Izinkan", Anda akan:
-1. ✅ Diredirect kembali ke halaman Settings
-2. ✅ Melihat notifikasi: "Berhasil terhubung ke Accurate Online"
-3. ✅ Melihat dropdown **"Pilih Database"** dengan daftar database perusahaan Anda
-4. ✅ Pilih database → Klik "Pilih Database"
-5. ✅ Tombol **"Sync Data"** akan aktif
-
-### **E. Test Sync Data**
-1. Pilih modul: **"Barang & Jasa"**
-2. Klik tombol **"Sync"**
-3. Tunggu proses sync selesai
-4. ✅ Jika berhasil, Anda akan melihat notifikasi: "Sinkronisasi berhasil"
-5. ✅ Data akan muncul di menu **"Barang & Jasa"** di sidebar
+Setelah tersambung, tombol **Test Koneksi** di sebelah tombol simpan dapat
+dipakai kapan saja untuk memverifikasi ulang kredensial yang sudah tersimpan
+(tanpa perlu mengisi ulang form) — berguna untuk memastikan token masih
+berlaku sebelum menjalankan sync data.
 
 ---
 
-## 🔍 TROUBLESHOOTING
+## 🔍 TROUBLESHOOTING SINGKAT
 
-### ❌ Error: "Client ID tidak tepat"
+Lihat **ACCURATE_TROUBLESHOOTING.md** untuk daftar error lengkap. Ringkasan:
 
-**Penyebab:**
-- Client ID yang Anda masukkan tidak terdaftar di Accurate Developer Console
-- Copy-paste tidak lengkap (ada spasi atau karakter kurang)
-
-**Solusi:**
-1. Buka Accurate Developer Console
-2. Cek Client ID di halaman aplikasi Anda
-3. Copy ulang dengan hati-hati (pastikan tidak ada spasi)
-4. Update di VPS dengan script atau manual edit
-
-### ❌ Error: "URL redirect tidak sesuai"
-
-**Penyebab:**
-- Redirect URI di Accurate Developer Console tidak exact match
-- Ada typo (huruf kapital, trailing slash, spasi, dll)
-
-**Solusi:**
-1. Buka Accurate Developer Console
-2. Edit aplikasi
-3. Pastikan Redirect URI persis: `https://analys.iwareid.com/settings`
-4. Save aplikasi
-5. Test lagi
-
-### ❌ Error: "Scope tidak tepat"
-
-**Penyebab:**
-- Ada scope yang tidak dicentang di Accurate Developer Console
-- Scope `report_view` tidak aktif
-
-**Solusi:**
-1. Buka Accurate Developer Console
-2. Edit aplikasi
-3. Centang SEMUA 7 scope yang dibutuhkan
-4. Save aplikasi
-5. Test lagi
-
-### ❌ Error: "Application is not active"
-
-**Penyebab:**
-- Aplikasi masih dalam status Draft
-
-**Solusi:**
-1. Buka Accurate Developer Console
-2. Edit aplikasi
-3. Pastikan status: **Active**
-4. Jika masih Draft, ubah ke Active dan save
-
-### ❌ Redirect loop atau blank page
-
-**Penyebab:**
-- DNS tidak resolve atau SSL certificate bermasalah
-- Frontend tidak bisa komunikasi dengan backend
-
-**Solusi:**
-1. Test DNS: `nslookup analys.iwareid.com`
-2. Test SSL: Buka `https://analys.iwareid.com` di browser (pastikan hijau)
-3. Test backend: `curl https://analys.iwareid.com/api/health`
-4. Cek Nginx logs: `sudo tail -f /var/log/nginx/dataanalis_error.log`
-
----
-
-## 📊 CHECKLIST LENGKAP
-
-Gunakan checklist ini untuk memastikan semua setup benar:
-
-### ✅ Di Accurate Developer Console:
-- [ ] Login berhasil ke https://developer.accurate.id/
-- [ ] Aplikasi sudah dibuat dengan nama "DataAnalis Dashboard"
-- [ ] Redirect URI: `https://analys.iwareid.com/settings` (EXACT)
-- [ ] Semua 7 scope sudah dicentang
-- [ ] Application Status: **Active** (bukan Draft)
-- [ ] Client ID dan Client Secret sudah dicopy
-
-### ✅ Di VPS Server:
-- [ ] SSH ke server berhasil
-- [ ] File `/opt/analis/.env` sudah di-update dengan credentials baru
-- [ ] `ACCURATE_CLIENT_ID` sudah benar
-- [ ] `ACCURATE_CLIENT_SECRET` sudah benar
-- [ ] `ACCURATE_REDIRECT_URI=https://analys.iwareid.com/settings`
-- [ ] Backend container sudah di-restart
-- [ ] Test: `cat /opt/analis/.env | grep ACCURATE` tampilkan config yang benar
-
-### ✅ Di Aplikasi Web:
-- [ ] Browser bisa akses https://analys.iwareid.com
-- [ ] SSL certificate hijau (tidak ada warning)
-- [ ] Login berhasil dengan admin@iware.id
-- [ ] Halaman Settings bisa dibuka
-- [ ] Tombol "Hubungkan ke Accurate" ada dan bisa diklik
-
-### ✅ OAuth Flow:
-- [ ] Klik "Hubungkan ke Accurate" redirect ke Accurate OAuth page
-- [ ] Halaman OAuth Accurate tampil (bukan error 401/403/404)
-- [ ] Login Accurate berhasil (jika diminta)
-- [ ] Halaman "Berikan Izin" tampil dengan list permissions
-- [ ] Klik "Izinkan" redirect kembali ke Settings
-- [ ] Notifikasi "Berhasil terhubung" muncul
-- [ ] Dropdown database muncul
-- [ ] Bisa pilih database dan klik "Pilih Database"
-- [ ] Tombol Sync aktif
+| Gejala | Penyebab paling umum |
+|---|---|
+| "Sesi Accurate telah berakhir" / HTTP 401 | API Token sudah dihapus/direvoke di Accurate Store, atau Signature Secret salah |
+| "Header X-Api-Signature invalid" | Signature Secret salah, atau timestamp tidak di-hash dengan benar |
+| "X-Api Timestamp difference more than 600 seconds" | Jam server backend tidak sinkron (drift > 10 menit) dengan waktu Accurate |
+| "API Token belum dikonfigurasi" | Field App Key/Signature Secret/API Token masih kosong di Pengaturan |
 
 ---
 
 ## 🎯 QUICK REFERENCE
 
-**Accurate Developer Console:**
-https://developer.accurate.id/
-
-**Redirect URI (Exact Match):**
-```
-https://analys.iwareid.com/settings
-```
-
-**Required Scopes:**
-```
-item_read
-customer_read
-sales_invoice_read
-sales_return_read
-report_view
-work_order_read
-stock_mutation_read
-```
-
-**Update Script Location:**
-```bash
-/usr/local/bin/update-env-accurate.sh
-```
-
-**Environment File Location:**
-```bash
-/opt/analis/.env
-```
-
-**Test Backend Health:**
-```bash
-curl https://analys.iwareid.com/api/health
-```
-
-**View Backend Logs:**
-```bash
-cd /opt/analis
-docker compose logs -f dataanalis-backend
-```
+**Area Developer Accurate:** https://developer.accurate.id/
+**Install Aplikasi & Buat API Token:** Pengaturan → Accurate Store (di accurate.id)
+**Dokumentasi resmi:** `accurate/accurate-online-api-token-1.0.3_page-*.jpg` (folder `accurate/` di repo ini)
+**Endpoint verifikasi token:** `POST https://account.accurate.id/api/api-token.do`
 
 ---
 
-## 💡 TIPS
-
-1. **Simpan Credentials dengan Aman**
-   - Jangan share Client Secret ke publik
-   - Simpan di password manager
-
-2. **Test di Incognito/Private Mode**
-   - Untuk memastikan tidak ada cache issue
-   - Clear cookies Accurate jika ada masalah
-
-3. **Gunakan Akun Accurate yang Benar**
-   - Pastikan akun Accurate yang digunakan punya akses ke database yang ingin disync
-   - Akun harus punya permission untuk akses API
-
-4. **Monitoring**
-   - Cek sync logs secara berkala di menu Settings
-   - Monitor error logs jika sync gagal
-
----
-
-**Created:** 18 Juni 2026  
-**Last Updated:** 18 Juni 2026  
-**Status:** Production Ready  
-**Version:** 1.0
+**Last Updated:** 06 Juli 2026
+**Status:** Sesuai implementasi kode saat ini (skema API Token, bukan OAuth)

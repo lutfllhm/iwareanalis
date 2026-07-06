@@ -224,6 +224,26 @@ export async function connectAccurateApiToken(req: AuthenticatedRequest, res: Re
 }
 
 /**
+ * Re-check currently stored Accurate credentials without requiring the
+ * caller to resupply App Key / Signature Secret / API Token.
+ */
+export async function testAccurateConnection(_req: AuthenticatedRequest, res: Response) {
+  try {
+    const result = await AccurateService.testConnection();
+
+    return res.status(200).json({
+      message: `Koneksi ke Accurate Online berhasil (${result.dbAlias})`,
+      ...result,
+    });
+  } catch (err: any) {
+    logger.error('Accurate test connection failed:', err);
+    return res.status(502).json({
+      message: err.message || 'Gagal terhubung ke Accurate Online',
+    });
+  }
+}
+
+/**
  * All downloadable modules list
  */
 const ALL_DOWNLOAD_MODULES = [

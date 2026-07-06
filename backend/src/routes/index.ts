@@ -86,6 +86,14 @@ router.post(
   syncController.connectAccurateApiToken as any
 );
 
+// Re-check currently stored Accurate credentials (no body required)
+router.post(
+  '/sync/test-connection',
+  authenticateToken as any,
+  requireRole(['admin', 'analyst']) as any,
+  syncController.testAccurateConnection as any
+);
+
 // Settings
 router.get('/settings', authenticateToken as any, syncController.getSettings as any);
 

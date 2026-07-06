@@ -1,305 +1,152 @@
-# 🔧 TROUBLESHOOTING: INTEGRASI ACCURATE ONLINE
+# 🔧 TROUBLESHOOTING: INTEGRASI ACCURATE ONLINE (Skema API Token)
 
-## ❌ Error: "Ada Permasalahan" saat OAuth
-
-### **Penyebab Error:**
-Error ini muncul karena salah satu dari:
-1. **Client ID tidak tepat** - Client ID di aplikasi tidak sesuai dengan yang didaftarkan di Accurate
-2. **Redirect URI tidak sesuai** - URL redirect tidak sama persis dengan yang didaftarkan
-3. **Scope tidak sesuai** - Scope yang diminta tidak diizinkan di aplikasi
+Aplikasi ini menggunakan skema **API Token** Accurate Online (App Key +
+Signature Secret + API Token + header HMAC-SHA256), bukan OAuth. Jika Anda
+mencari error terkait `client_id`/`redirect_uri`/OAuth authorize page, itu
+tidak berlaku untuk versi kode saat ini — lihat ACCURATE_SETUP_GUIDE.md untuk
+alur yang benar.
 
 ---
 
-## ✅ SOLUSI LENGKAP
+## 📚 Daftar Endpoint Resmi yang Dipakai (vs yang TIDAK ada)
 
-### **STEP 1: Setup Aplikasi di Accurate Developer Console**
+Referensi lengkap endpoint Accurate ada di halaman
+`https://account.accurate.id/developer/api-docs.do` (menu Area Developer →
+Daftar API). Endpoint di dalam `/api/report/` yang **benar-benar ada** per
+pengecekan langsung ke halaman tersebut:
 
-1. **Login ke Developer Console:**
-   - URL: https://developer.accurate.id/
-   - Login dengan akun Accurate Online Anda
+| Endpoint | Method | Parameter wajib |
+|---|---|---|
+| `/api/report/serial-number-mutation.do` | GET | `itemNo` |
+| `/api/report/serial-number-per-warehouse.do` | GET | `itemNo` |
+| `/api/report/stock-mutation-summary.do` | GET | `itemNo`, `fromDate`, `toDate` |
+| `/api/report/work-order-detail.do` | GET | `workOrderNo` |
 
-2. **Buka/Buat Aplikasi:**
-   - Jika sudah ada aplikasi dengan Client ID: `1be820dc-c25a-43b7-8494-040830235d68`
-     → Klik **Edit** pada aplikasi tersebut
-   - Jika belum ada → Klik **"Create New App"**
+Endpoint berikut **tidak ada** di Daftar API resmi dan sempat salah dipakai
+di kode versi lama (sudah diperbaiki):
+- `/api/report/get-sales-per-item.do` — dulu dipakai untuk sync "Rincian
+  Penjualan per Barang". Sekarang datanya diturunkan dari `detailList` pada
+  `/api/sales-invoice/list.do` (endpoint resmi, ada di Daftar API).
+- `/api/report/sales-invoice-list.do` — dulu dipakai untuk sync "Daftar
+  Faktur Penjualan". Sekarang langsung memakai `/api/sales-invoice/list.do`.
 
-3. **Konfigurasi Aplikasi:**
-
-```
-═══════════════════════════════════════════════════════════
-APPLICATION CONFIGURATION
-═══════════════════════════════════════════════════════════
-
-Application Name:
-  DataAnalis Dashboard
-
-Description:
-  Dashboard analytics platform integrated with Accurate Online
-
-Redirect URIs: (⚠️ HARUS EXACT MATCH)
-  https://analys.iwareid.com/settings
-
-⚠️ PENTING: 
-  - Harus https:// (bukan http://)
-  - Harus exact match dengan path /settings
-  - Tidak ada trailing slash (/)
-  - Tidak ada spasi di awal/akhir
-
-Allowed Scopes: (Centang SEMUA ini)
-  ✅ item_read              → Baca daftar barang/jasa
-  ✅ customer_read          → Baca daftar pelanggan  
-  ✅ sales_invoice_read     → Baca faktur penjualan
-  ✅ sales_return_read      → Baca retur penjualan
-  ✅ report_view            → Akses laporan (PENTING!)
-  ✅ work_order_read        → Baca work order
-  ✅ stock_mutation_read    → Baca mutasi stok
-
-═══════════════════════════════════════════════════════════
-```
-
-4. **Simpan dan Copy Credentials:**
-   - Klik **Save**
-   - Copy **Client ID** dan **Client Secret**
+Jika sync gagal dengan pesan 404/"endpoint not found" untuk modul manapun,
+kemungkinan besar penyebabnya sama: path endpoint yang dipanggil tidak ada
+di Daftar API resmi Accurate. Selalu verifikasi nama path di halaman
+`account.accurate.id/developer/api-docs.do` sebelum menambah puller baru.
 
 ---
 
-### **STEP 2: Verifikasi Credentials di VPS**
+## ❌ Error: "Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan." (HTTP 401)
 
-Login ke VPS dan cek konfigurasi:
+### Penyebab paling umum:
+1. **API Token sudah dihapus/direvoke** di Accurate Store → API Token (mis.
+   karena diklik "Hapus", atau dibuat ulang oleh user lain sehingga token lama
+   invalid).
+2. **Signature Secret salah** — nilainya harus App Secret dari aplikasi
+   Developer yang App Key-nya dipakai untuk install, BUKAN password akun
+   Accurate atau Client Secret OAuth lama.
+3. **App Key tidak cocok** dengan aplikasi yang API Token-nya dibuat.
+4. Jam server backend melenceng jauh dari waktu Accurate (lihat error
+   timestamp di bawah) — request ditolak karena timestamp invalid, yang juga
+   bisa muncul sebagai 401.
 
+### Solusi:
+1. Buka **Pengaturan → Koneksi Accurate Online** di aplikasi ini, klik tombol
+   **Test Koneksi**. Pesan error yang muncul sekarang menyertakan detail asli
+   dari Accurate (bukan cuma "sesi berakhir" generik) — baca pesan tersebut
+   dulu untuk tahu apakah ini soal token, signature, atau timestamp.
+2. Jika token memang sudah tidak valid: login ke **accurate.id** → Pengaturan
+   → Accurate Store → tab **API Token** → buat token baru (token lama otomatis
+   tergantikan untuk kombinasi user + aplikasi yang sama).
+3. Masukkan ulang **App Key**, **Signature Secret**, **API Token** yang baru di
+   halaman Pengaturan aplikasi ini, klik **Simpan & Hubungkan dengan Accurate**.
+4. Cek log backend untuk detail teknis:
+   ```bash
+   ssh root@145.79.8.148
+   cd /opt/analis
+   docker compose logs -f dataanalis-backend
+   ```
+
+---
+
+## ❌ Error: "Header X-Api-Signature invalid"
+
+**Penyebab:** Signature Secret yang tersimpan salah, sehingga hasil
+HMAC-SHA256 dari timestamp tidak cocok dengan yang diharapkan Accurate.
+
+**Solusi:** Ambil ulang Signature Secret (App Secret) dari halaman aplikasi di
+https://developer.accurate.id/, pastikan tidak ada spasi/karakter terpotong
+saat disalin, lalu simpan ulang di halaman Pengaturan.
+
+---
+
+## ❌ Error: "Header X-Api-Timestamp invalid" / "difference more than 600 seconds with Server Time"
+
+**Penyebab:** Format timestamp salah, atau jam server (VPS) yang menjalankan
+backend berbeda lebih dari 10 menit dari waktu Accurate. Backend mengirim
+timestamp dalam zona `Asia/Jakarta` format `dd/mm/yyyy hh:nn:ss`.
+
+**Solusi:**
 ```bash
 ssh root@145.79.8.148
-cd /opt/analis
-cat .env | grep ACCURATE
+date                     # cek jam server saat ini
+timedatectl               # pastikan NTP sync aktif (systemd)
+sudo timedatectl set-ntp true
 ```
-
-**Output harus menunjukkan:**
-```env
-ACCURATE_MOCK=false
-ACCURATE_CLIENT_ID=<your_client_id_here>
-ACCURATE_CLIENT_SECRET=<your_client_secret_here>
-ACCURATE_REDIRECT_URI=https://analys.iwareid.com/settings
-```
-
-**Jika Client ID/Secret berbeda dengan yang di Accurate Developer Console:**
-
-Edit file `.env`:
-```bash
-nano .env
-```
-
-Update baris berikut dengan credentials yang benar:
-```env
-ACCURATE_CLIENT_ID=<client_id_from_accurate>
-ACCURATE_CLIENT_SECRET=<client_secret_from_accurate>
-```
-
-Save (Ctrl+O, Enter, Ctrl+X)
-
-Restart backend:
-```bash
-docker compose restart dataanalis-backend
-```
+Setelah jam server benar, coba **Test Koneksi** lagi di halaman Pengaturan.
 
 ---
 
-### **STEP 3: Test OAuth Flow Lagi**
+## ❌ Error: "API Token belum dikonfigurasi. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan."
 
-1. Buka browser: https://analys.iwareid.com
-2. Login dengan admin@iware.id / jasad666
-3. Klik menu **Settings** di sidebar
-4. Klik tombol **"Hubungkan ke Accurate"**
-5. Anda akan diredirect ke Accurate OAuth page
-6. **Jika masih error** → lanjut ke STEP 4
+**Penyebab:** Salah satu dari App Key / Signature Secret / API Token masih
+kosong di database (belum pernah diisi, atau gagal tersimpan).
 
----
-
-### **STEP 4: Debug OAuth URL**
-
-Jika masih error, kita perlu melihat OAuth URL yang di-generate oleh backend.
-
-**Cara 1: Lihat di Browser Network Tab**
-
-1. Buka browser DevTools (F12)
-2. Tab **Network**
-3. Klik tombol "Hubungkan ke Accurate"
-4. Lihat request ke `/api/sync/connect`
-5. Copy `authUrl` dari response
-6. Paste URL di notepad dan decode
-
-**Cara 2: Test Langsung via cURL**
-
-Login dulu untuk mendapatkan token:
-
-```bash
-# 1. Login dan simpan response
-curl -X POST https://analys.iwareid.com/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@iware.id","password":"jasad666"}' \
-  -c cookies.txt \
-  > login_response.json
-
-# 2. Extract access token
-cat login_response.json
-
-# 3. Request OAuth URL dengan token
-curl https://analys.iwareid.com/api/sync/connect \
-  -H "Authorization: Bearer <your_access_token_here>" \
-  -b cookies.txt
-```
-
-**OAuth URL yang benar harus seperti ini:**
-
-```
-https://account.accurate.id/oauth/authorize?client_id=1be820dc-c25a-43b7-8494-040830235d68&response_type=code&redirect_uri=https%3A%2F%2Fanalys.iwareid.com%2Fsettings&scope=item_read%20customer_read%20sales_invoice_read%20sales_return_read%20report_view%20work_order_read%20stock_mutation_read
-```
-
-**Decode URL untuk verifikasi:**
-- client_id: `1be820dc-c25a-43b7-8494-040830235d68`
-- redirect_uri: `https://analys.iwareid.com/settings`
-- scope: `item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read`
+**Solusi:** Isi ketiga field di halaman Pengaturan → Koneksi Accurate Online,
+lalu klik **Simpan & Hubungkan dengan Accurate**.
 
 ---
 
-### **STEP 5: Checklist Troubleshooting**
+## ❌ Aplikasi tidak muncul saat "Buat API Token" di Accurate Store
 
-Pastikan SEMUA ini benar:
+**Penyebab:** Aplikasi Developer belum di-Install ke Data Usaha tersebut.
 
-#### ✅ Di Accurate Developer Console:
-- [ ] Aplikasi sudah dibuat/diedit
-- [ ] Client ID cocok dengan yang di `.env`
-- [ ] Redirect URI: `https://analys.iwareid.com/settings` (exact match)
-- [ ] Semua 7 scope sudah dicentang (item_read, customer_read, dll)
-- [ ] Aplikasi status: **Active** (bukan Draft)
-
-#### ✅ Di VPS .env file:
-- [ ] `ACCURATE_MOCK=false`
-- [ ] `ACCURATE_CLIENT_ID` sama dengan di Developer Console
-- [ ] `ACCURATE_CLIENT_SECRET` sama dengan di Developer Console  
-- [ ] `ACCURATE_REDIRECT_URI=https://analys.iwareid.com/settings`
-- [ ] Backend container sudah di-restart setelah edit .env
-
-#### ✅ Di Domain & SSL:
-- [ ] DNS `analys.iwareid.com` mengarah ke 145.79.8.148
-- [ ] SSL certificate valid (HTTPS hijau di browser)
-- [ ] Nginx berjalan dan proxy ke port 3010/5010
+**Solusi:** Ikuti STEP 2 di ACCURATE_SETUP_GUIDE.md (Install Aplikasi lewat
+Accurate Store → Aplikasi Saya → App Key) sebelum membuat API Token.
 
 ---
 
-## 🔍 ERROR LAINNYA
+## 🧪 Cara Cepat Cek Status Koneksi
 
-### Error: "Redirect URI Mismatch"
-
-**Penyebab:** Redirect URI di request tidak sama dengan yang didaftarkan
-
-**Solusi:**
-1. Cek redirect URI di Accurate Developer Console
-2. Harus exact match: `https://analys.iwareid.com/settings`
-3. Tidak boleh ada trailing slash atau parameter tambahan
-
-### Error: "Invalid Client"
-
-**Penyebab:** Client ID salah atau aplikasi tidak aktif
-
-**Solusi:**
-1. Verifikasi Client ID di Developer Console
-2. Pastikan aplikasi status: Active
-3. Update Client ID di `.env` jika berbeda
-
-### Error: "Scope Not Allowed"
-
-**Penyebab:** Scope yang diminta tidak diizinkan di aplikasi
-
-**Solusi:**
-1. Buka aplikasi di Developer Console
-2. Centang semua scope yang dibutuhkan:
-   - item_read, customer_read, sales_invoice_read
-   - sales_return_read, report_view, work_order_read
-   - stock_mutation_read
-3. Save aplikasi
-
----
-
-## 📞 Masih Bermasalah?
-
-### **Opsi 1: Buat Aplikasi Baru di Accurate**
-
-Jika aplikasi lama rusak, buat aplikasi baru:
-
-1. Login ke https://developer.accurate.id/
-2. Create New App
-3. Isi konfigurasi seperti di STEP 1
-4. Copy Client ID & Secret yang baru
-5. Update di VPS `.env`
-6. Restart backend
-
-### **Opsi 2: Cek Log Backend**
-
-```bash
-ssh root@145.79.8.148
-cd /opt/analis
-docker compose logs -f dataanalis-backend
-```
-
-Cari error message terkait OAuth/Accurate
-
-### **Opsi 3: Test dengan Mock Mode**
-
-Sementara troubleshoot, gunakan mock mode:
-
-```bash
-nano /opt/analis/.env
-# Ubah:
-ACCURATE_MOCK=true
-
-# Restart:
-docker compose restart dataanalis-backend
-```
-
-Dengan mock mode, integrasi akan menggunakan data dummy tanpa koneksi ke Accurate.
-
----
-
-## ✅ Verifikasi Integrasi Berhasil
-
-Setelah OAuth berhasil, Anda akan:
-
-1. **Diredirect kembali ke Settings page**
-2. **Melihat pesan sukses:** "Berhasil terhubung ke Accurate Online"
-3. **Muncul pilihan database** Accurate yang tersedia
-4. **Pilih database** → Klik "Pilih Database"
-5. **Tombol Sync** menjadi aktif
-6. **Test sync modul** → Pilih "Barang & Jasa" → Klik Sync
-7. **Lihat hasil sync** di tabel data atau sync logs
+1. **Dari UI:** Pengaturan → Koneksi Accurate Online → tombol **Test Koneksi**
+   (tersedia setelah pernah berhasil connect sekali). Ini memanggil ulang
+   `/api/api-token.do` dengan kredensial yang sudah tersimpan, tanpa perlu
+   isi ulang form.
+2. **Dari API langsung:**
+   ```bash
+   curl -X POST https://analys.iwareid.com/api/sync/test-connection \
+     -H "Authorization: Bearer <access_token_login_anda>"
+   ```
+3. **Mode mock (sementara, tanpa koneksi Accurate):**
+   ```bash
+   nano /opt/analis/.env
+   # ACCURATE_MOCK=true
+   docker compose restart dataanalis-backend
+   ```
 
 ---
 
 ## 📋 Quick Reference
 
-**Accurate Developer Console:**
-https://developer.accurate.id/
-
-**Redirect URI yang benar:**
-```
-https://analys.iwareid.com/settings
-```
-
-**Scope yang dibutuhkan:**
-```
-item_read customer_read sales_invoice_read sales_return_read report_view work_order_read stock_mutation_read
-```
-
-**VPS Environment File:**
-```bash
-/opt/analis/.env
-```
-
-**Restart Backend:**
-```bash
-cd /opt/analis && docker compose restart dataanalis-backend
-```
+**Buat/kelola App Key & Signature Secret:** https://developer.accurate.id/
+**Install Aplikasi & Buat API Token:** accurate.id → Pengaturan → Accurate Store
+**Endpoint verifikasi token:** `POST https://account.accurate.id/api/api-token.do`
+**VPS Environment File:** `/opt/analis/.env`
+**Restart Backend:** `cd /opt/analis && docker compose restart dataanalis-backend`
+**Kontak resmi Accurate untuk isu API Token:** aol-integration@cpssoft.com
 
 ---
 
-**Last Updated:** 18 Juni 2026  
-**Status:** Production Ready
+**Last Updated:** 06 Juli 2026
+**Status:** Sesuai implementasi kode saat ini (skema API Token, bukan OAuth)

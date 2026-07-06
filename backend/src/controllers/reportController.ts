@@ -181,7 +181,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     if (status === 401) {
       logger.warn('Accurate token expired, needs re-auth');
       return res.status(401).json({
-        message: 'Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan.',
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
         code: 'TOKEN_EXPIRED',
       });
     }
@@ -267,7 +267,7 @@ export async function getDaftarFakturPenjualan(req: AuthenticatedRequest, res: R
 
     if (status === 401) {
       return res.status(401).json({
-        message: 'Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan.',
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
         code: 'TOKEN_EXPIRED',
       });
     }
@@ -354,7 +354,7 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
 
     if (status === 401) {
       return res.status(401).json({
-        message: 'Sesi Accurate telah berakhir. Silakan hubungkan ulang di halaman Pengaturan.',
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
         code: 'TOKEN_EXPIRED',
       });
     }

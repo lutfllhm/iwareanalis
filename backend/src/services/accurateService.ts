@@ -127,11 +127,37 @@ export class AccurateService {
       logger.info(`Accurate API Token verified: host=${host}, db=${dbAlias}`);
       return { host, dbAlias, dbId };
     } catch (error: any) {
+      const status = error.response?.status;
       const accurateError = error.response?.data;
       const detail = accurateError?.d || accurateError?.message || error.message;
-      logger.error('Failed to verify API Token:', accurateError || error.message);
-      throw new Error(typeof detail === 'string' ? detail : (error.message || 'Gagal memverifikasi API Token'));
+      const detailStr = typeof detail === 'string' ? detail : JSON.stringify(detail);
+      logger.error(`Failed to verify API Token (status=${status}):`, accurateError || error.message);
+
+      if (status === 401 || status === 403) {
+        throw new Error(
+          `App Key, Signature Secret, atau API Token tidak valid/sudah dihapus di Accurate (HTTP ${status}). ` +
+          `Detail: ${detailStr}. Silakan buat ulang API Token baru dari menu Accurate Store - API Token.`
+        );
+      }
+
+      throw new Error(detailStr || error.message || 'Gagal memverifikasi API Token');
     }
+  }
+
+  /**
+   * Re-check the currently stored credentials against Accurate without
+   * requiring the caller to resupply App Key / Signature Secret / API Token.
+   * Used by the "Test Koneksi" button in Settings.
+   */
+  static async testConnection(): Promise<{ host: string; dbAlias: string; dbId: number }> {
+    const apiToken = await this.getSetting('ACCURATE_API_TOKEN');
+    const signatureSecret = await this.getSetting('ACCURATE_SIGNATURE_SECRET');
+
+    if (!apiToken || !signatureSecret) {
+      throw new Error('Belum ada kredensial Accurate tersimpan. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.');
+    }
+
+    return this.verifyApiToken();
   }
 
   /**
@@ -225,8 +251,16 @@ export class AccurateService {
 
       return { success: true, count: syncCount };
     } catch (error: any) {
-      const errorMessage = error.message || 'Unknown integration error';
-      logger.error(`Sync FAILED for ${moduleName}:`, error);
+      const status = error.response?.status;
+      const accurateDetail = error.response?.data?.d || error.response?.data?.message;
+      let errorMessage = error.message || 'Unknown integration error';
+
+      if (status === 401 || status === 403) {
+        errorMessage = `Sesi Accurate telah berakhir atau token tidak valid (HTTP ${status}). ` +
+          `${accurateDetail ? `Detail: ${accurateDetail}. ` : ''}Silakan hubungkan ulang di halaman Pengaturan.`;
+      }
+
+      logger.error(`Sync FAILED for ${moduleName} (status=${status}):`, error.response?.data || error);
 
       // Create Failed Sync Log
       await prisma.syncLog.create({
@@ -455,32 +489,44 @@ export class AccurateService {
 
   private static async pullMutasiSerialNumber(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: GET /api/report/serial-number-mutation.do
-    const response = await axios.get(
-      `${host}/accurate/api/report/serial-number-mutation.do`,
-      { headers, maxRedirects: 5 }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data?.message || 'No serial number mutation data returned');
-    }
-
-    const rows = response.data.d;
+    // itemNo adalah parameter WAJIB (per dokumentasi resmi Accurate), sehingga
+    // request harus dilakukan per barang, bukan sekali panggil untuk semua barang.
+    const items = await prisma.barangJasa.findMany({ select: { kode_barang: true } });
     let count = 0;
 
-    for (const row of rows) {
-      await prisma.mutasiSerialNumber.create({
-        data: {
-          kode_barang: row.itemNo || '',
-          serial_number: row.serialNumber || '',
-          tanggal: new Date(row.date || row.transDate),
-          tipe_mutasi: row.transType || 'UNKNOWN',
-          jumlah: row.quantity || 0,
-          nama_gudang: row.warehouseName || null,
-          keterangan: row.description || null,
-          synced_at: new Date(),
-        },
-      });
-      count++;
+    for (const item of items) {
+      try {
+        const response = await axios.get(
+          `${host}/accurate/api/report/serial-number-mutation.do`,
+          {
+            params: { itemNo: item.kode_barang },
+            headers,
+            maxRedirects: 5,
+          }
+        );
+
+        if (!response.data || !response.data.d) continue;
+
+        const rows: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
+
+        for (const row of rows) {
+          await prisma.mutasiSerialNumber.create({
+            data: {
+              kode_barang: row.itemNo || item.kode_barang,
+              serial_number: row.serialNumber || '',
+              tanggal: new Date(row.date || row.transDate),
+              tipe_mutasi: row.transType || 'UNKNOWN',
+              jumlah: row.quantity || 0,
+              nama_gudang: row.warehouseName || null,
+              keterangan: row.description || null,
+              synced_at: new Date(),
+            },
+          });
+          count++;
+        }
+      } catch {
+        // Lewati item yang gagal dan lanjutkan ke item berikutnya
+      }
     }
 
     return count;
@@ -658,30 +704,38 @@ export class AccurateService {
   }
 
   /**
-   * Pull Rincian Penjualan per Barang dari Report API Accurate
-   * Endpoint: GET /api/report/get-sales-per-item.do (HTTP Method: GET, Scope: report_view)
+   * Pull Rincian Penjualan per Barang.
+   *
+   * Accurate tidak menyediakan endpoint /api/report/get-sales-per-item.do —
+   * endpoint tersebut tidak ada di Daftar API resmi Accurate Online
+   * (account.accurate.id/developer/api-docs.do). Data rincian penjualan per
+   * barang diturunkan dari detailList milik /api/sales-invoice/list.do,
+   * sama seperti pendekatan pullFakturPenjualan dan reportController.ts.
    */
   private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>): Promise<number> {
-    // Parameter Request yang diperlukan (dari dokumentasi API):
-    // - itemNo (tidak wajib, kosongkan untuk ambil semua barang)
-
-    try {
-      const response = await axios.get(
-        `${host}/accurate/api/report/get-sales-per-item.do`,
-        { headers, maxRedirects: 5 }
-      );
-
-      if (!response.data || !response.data.d) {
-        throw new Error(response.data?.message || 'No sales per item data returned');
+    const response = await axios.post(
+      `${host}/accurate/api/sales-invoice/list.do`,
+      new URLSearchParams({
+        fields: 'number,transDate,customer,salesman,detailList',
+      }).toString(),
+      {
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
       }
+    );
 
-      const rows: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
-      let count = 0;
+    if (!response.data || !response.data.d) {
+      throw new Error(response.data?.message || 'No sales invoice data returned');
+    }
 
-      for (const row of rows) {
-        const itemNo = row.itemNo || row.kode || row.itemCode || 'UNKNOWN';
-        const itemName = row.itemName || row.namaBarang || 'Barang Tidak Diketahui';
-        
+    const invoices: any[] = response.data.d;
+    let count = 0;
+
+    for (const inv of invoices) {
+      for (const line of (inv.detailList || [])) {
+        const itemNo = line.item?.no || 'BRG-UNKNOWN';
+        const itemName = line.item?.name || 'Barang Tidak Diketahui';
+
         // Pastikan barang ada di master
         await prisma.barangJasa.upsert({
           where: { kode_barang: itemNo },
@@ -697,99 +751,29 @@ export class AccurateService {
           },
         });
 
-        // Insert rincian penjualan
+        const kuantitas = line.quantity || 0;
+        const hargaSatuan = line.unitPrice || line.basePrice || 0;
+
         await prisma.rincianPenjualanBarang.create({
           data: {
-            nomor: row.transactionNo || row.nomor || `INV-${Date.now()}-${count}`,
+            nomor: inv.number,
             kode: itemNo,
             nama_barang: itemName,
-            kuantitas: row.quantity || row.kuantitas || 0,
-            harga: row.unitPrice || row.harga || 0,
-            total_harga: row.amount || row.totalHarga || 0,
-            penjualan: row.salesAmount || row.penjualan || 0,
-            tanggal: row.transDate ? new Date(row.transDate) : new Date(),
-            nama_pelanggan: row.customerName || row.namaPelanggan || 'Umum',
-            nama_tenaga_penjual: row.salesmanName || row.namaSales || 'General',
-            id_karyawan_tenaga_penjual: row.salesmanId || row.idSales || 'SALES-001',
+            kuantitas,
+            harga: hargaSatuan,
+            total_harga: line.amount || (kuantitas * hargaSatuan),
+            penjualan: line.amount || (kuantitas * hargaSatuan),
+            tanggal: new Date(inv.transDate),
+            nama_pelanggan: inv.customer?.name || 'Umum',
+            nama_tenaga_penjual: inv.salesman?.name || 'General',
+            id_karyawan_tenaga_penjual: inv.salesman?.salesNo || 'SALES-UNKNOWN',
             synced_at: new Date(),
           },
         });
         count++;
       }
-
-      return count;
-    } catch (error: any) {
-      logger.error('Failed to pull Rincian Penjualan per Barang:', error.response?.data || error.message);
-      throw error;
     }
-  }
 
-  /**
-   * Pull Daftar Faktur Penjualan dari Accurate Report API
-   * Endpoint: GET /api/report/sales-invoice-list.do (Scope: report_view)
-   * 
-   * Data dari menu: Daftar Laporan > Penjualan > Daftar Faktur Penjualan
-   * @note Currently not used but kept for future implementation
-   */
-  public static async pullDaftarFakturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
-    try {
-      // Ambil daftar faktur penjualan dari Report API
-      const response = await axios.get(
-        `${host}/accurate/api/report/sales-invoice-list.do`,
-        { headers, maxRedirects: 5 }
-      );
-
-      if (!response.data || !response.data.d) {
-        // Fallback ke sales-invoice/list.do jika report API tidak ada
-        return await this.pullFakturPenjualan(host, headers);
-      }
-
-      const invoices: any[] = Array.isArray(response.data.d) ? response.data.d : [response.data.d];
-      let count = 0;
-
-      for (const inv of invoices) {
-        const customerNo = inv.customerNo || inv.customerId || 'UNKNOWN';
-        const customerName = inv.customerName || 'Pelanggan Umum';
-        
-        // Pastikan pelanggan ada di database
-        await prisma.pelanggan.upsert({
-          where: { id_pelanggan: customerNo },
-          update: { nama: customerName },
-          create: {
-            id_pelanggan: customerNo,
-            nama: customerName,
-            synced_at: new Date(),
-          },
-        });
-
-        // Simpan faktur penjualan
-        await prisma.fakturPenjualan.upsert({
-          where: { nomor: inv.number || inv.invoiceNumber },
-          update: {
-            id_pelanggan: customerNo,
-            tanggal: new Date(inv.transDate || inv.date),
-            total: inv.totalAmount || inv.total || 0,
-            pembayaran: inv.paidAmount || inv.paid || 0,
-            synced_at: new Date(),
-          },
-          create: {
-            nomor: inv.number || inv.invoiceNumber,
-            id_pelanggan: customerNo,
-            tanggal: new Date(inv.transDate || inv.date),
-            total: inv.totalAmount || inv.total || 0,
-            pembayaran: inv.paidAmount || inv.paid || 0,
-            synced_at: new Date(),
-          },
-        });
-
-        count++;
-      }
-
-      return count;
-    } catch (error: any) {
-      logger.error('Failed to pull Daftar Faktur Penjualan:', error.response?.data || error.message);
-      // Fallback to existing method
-      return await this.pullFakturPenjualan(host, headers);
-    }
+    return count;
   }
 }

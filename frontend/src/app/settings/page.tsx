@@ -125,6 +125,24 @@ export default function SettingsPage() {
     },
   });
 
+  // Mutation to re-check the currently stored Accurate credentials
+  const testConnectionMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/sync/test-connection');
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setToast({ type: 'success', msg: data.message || 'Koneksi ke Accurate berhasil' });
+      setConnectedDbName(data.dbAlias || '');
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      setTimeout(() => setToast(null), 4000);
+    },
+    onError: (err: any) => {
+      setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal terhubung ke Accurate' });
+      setTimeout(() => setToast(null), 6000);
+    },
+  });
+
   // User password change mutation
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
@@ -346,7 +364,16 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end pt-2 border-t border-border/50">
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-border/50">
+                <button
+                  onClick={() => testConnectionMutation.mutate()}
+                  disabled={testConnectionMutation.isPending || !connectedDbName}
+                  title={!connectedDbName ? 'Simpan & hubungkan kredensial terlebih dahulu' : 'Cek ulang kredensial yang sudah tersimpan ke Accurate'}
+                  className="px-4 py-2.5 rounded-xl border border-input bg-background/50 text-foreground font-semibold hover:bg-accent transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
+                >
+                  <RefreshCw size={14} className={testConnectionMutation.isPending ? 'animate-spin' : ''} />
+                  {testConnectionMutation.isPending ? 'Menguji...' : 'Test Koneksi'}
+                </button>
                 <button
                   onClick={() => connectApiTokenMutation.mutate()}
                   disabled={connectApiTokenMutation.isPending || !appKey || !signatureSecret || !apiToken}
