@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import {
   FileText, Calendar, Search, ChevronLeft, ChevronRight,
-  AlertCircle, Loader2, ShoppingBag, Settings
+  AlertCircle, Loader2, ShoppingBag, Settings, Columns3, Building2, Check
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -18,12 +18,40 @@ interface RincianRow {
   kategoriBarang: string;
   namaCustomer: string;
   namaSalesman: string;
+  namaCabang: string;
   kuantitas: number;
   satuan: string;
   hargaSatuan: number;
   diskon: number;
   totalHarga: number;
 }
+
+interface Cabang {
+  id: number | string;
+  nama: string;
+}
+
+interface ColumnDef {
+  key: string;
+  label: string;
+}
+
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: 'nomorFaktur', label: 'No. Faktur' },
+  { key: 'tanggal', label: 'Tanggal' },
+  { key: 'kodeBarang', label: 'Kode Barang' },
+  { key: 'namaBarang', label: 'Nama Barang' },
+  { key: 'kategoriBarang', label: 'Kategori' },
+  { key: 'namaCustomer', label: 'Pelanggan' },
+  { key: 'namaSalesman', label: 'Salesman' },
+  { key: 'namaCabang', label: 'Cabang' },
+  { key: 'kuantitas', label: 'Qty' },
+  { key: 'hargaSatuan', label: 'Harga Satuan' },
+  { key: 'diskon', label: 'Diskon' },
+  { key: 'totalHarga', label: 'Total' },
+];
+
+const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map((c) => c.key);
 
 const formatRupiah = (val: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -55,11 +83,71 @@ export default function RincianPenjualanPerBarangPage() {
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
+  const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
+  const [cabangOpen, setCabangOpen] = useState(false);
+  const cabangRef = useRef<HTMLDivElement>(null);
+
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('rincianPenjualan.visibleColumns');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) setVisibleColumns(parsed);
+      } catch { /* ignore corrupt value */ }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('rincianPenjualan.visibleColumns', JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cabangRef.current && !cabangRef.current.contains(e.target as Node)) setCabangOpen(false);
+      if (columnsRef.current && !columnsRef.current.contains(e.target as Node)) setColumnsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const { data: cabangData } = useQuery({
+    queryKey: ['accurateCabangList'],
+    queryFn: async () => {
+      const res = await api.get('/report/cabang');
+      return res.data;
+    },
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const cabangList: Cabang[] = cabangData?.data || [];
+
+  const toggleCabang = (id: string) => {
+    setSelectedCabang((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    );
+    setPage(1);
+  };
+
+  const toggleColumn = (key: string) => {
+    setVisibleColumns((prev) =>
+      prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]
+    );
+  };
+
+  const isColVisible = (key: string) => visibleColumns.includes(key);
+
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate],
+    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate, selectedCabang],
     queryFn: async () => {
       const res = await api.get('/report/rincian-penjualan-per-barang', {
-        params: { page, limit, q, startDate, endDate },
+        params: {
+          page, limit, q, startDate, endDate,
+          branchIds: selectedCabang.length ? selectedCabang.join(',') : undefined,
+        },
       });
       return res.data;
     },
@@ -138,6 +226,45 @@ export default function RincianPenjualanPerBarangPage() {
             />
           </div>
 
+          {/* Branch (cabang) multi-select */}
+          <div className="relative" ref={cabangRef}>
+            <button
+              onClick={() => setCabangOpen((o) => !o)}
+              className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+            >
+              <Building2 size={15} className="text-muted-foreground" />
+              {selectedCabang.length === 0
+                ? 'Semua Cabang'
+                : `${selectedCabang.length} Cabang dipilih`}
+            </button>
+            {cabangOpen && (
+              <div className="absolute z-20 mt-2 w-64 max-h-72 overflow-y-auto bg-card border border-border rounded-xl shadow-lg p-2">
+                {cabangList.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                    Tidak ada data cabang (hanya tersedia di mode Live Accurate)
+                  </p>
+                ) : (
+                  cabangList.map((c) => {
+                    const id = String(c.id);
+                    const checked = selectedCabang.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => toggleCabang(id)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted transition-colors text-left"
+                      >
+                        <span className={`flex items-center justify-center w-4 h-4 rounded border ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
+                          {checked && <Check size={12} />}
+                        </span>
+                        {c.nama}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Search box */}
           <div className="flex-1 flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
             <Search size={15} className="text-muted-foreground flex-shrink-0" />
@@ -155,6 +282,37 @@ export default function RincianPenjualanPerBarangPage() {
             >
               Cari
             </button>
+          </div>
+
+          {/* Column visibility settings */}
+          <div className="relative" ref={columnsRef}>
+            <button
+              onClick={() => setColumnsOpen((o) => !o)}
+              className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+              title="Atur kolom yang ditampilkan"
+            >
+              <Columns3 size={15} className="text-muted-foreground" />
+              Kolom
+            </button>
+            {columnsOpen && (
+              <div className="absolute right-0 z-20 mt-2 w-56 max-h-80 overflow-y-auto bg-card border border-border rounded-xl shadow-lg p-2">
+                {ALL_COLUMNS.map((col) => {
+                  const checked = isColVisible(col.key);
+                  return (
+                    <button
+                      key={col.key}
+                      onClick={() => toggleColumn(col.key)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted transition-colors text-left"
+                    >
+                      <span className={`flex items-center justify-center w-4 h-4 rounded border ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
+                        {checked && <Check size={12} />}
+                      </span>
+                      {col.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -206,71 +364,99 @@ export default function RincianPenjualanPerBarangPage() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">No. Faktur</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tanggal</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kode Barang</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Nama Barang</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kategori</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Pelanggan</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Salesman</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Qty</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Harga Satuan</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Diskon</th>
-                  <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Total</th>
+                  {isColVisible('nomorFaktur') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">No. Faktur</th>}
+                  {isColVisible('tanggal') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Tanggal</th>}
+                  {isColVisible('kodeBarang') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kode Barang</th>}
+                  {isColVisible('namaBarang') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Nama Barang</th>}
+                  {isColVisible('kategoriBarang') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Kategori</th>}
+                  {isColVisible('namaCustomer') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Pelanggan</th>}
+                  {isColVisible('namaSalesman') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Salesman</th>}
+                  {isColVisible('namaCabang') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Cabang</th>}
+                  {isColVisible('kuantitas') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Qty</th>}
+                  {isColVisible('hargaSatuan') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Harga Satuan</th>}
+                  {isColVisible('diskon') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Diskon</th>}
+                  {isColVisible('totalHarga') && <th className="px-4 py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider text-right whitespace-nowrap">Total</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground text-sm">
+                    <td colSpan={visibleColumns.length || 1} className="px-4 py-12 text-center text-muted-foreground text-sm">
                       Tidak ada data pada periode yang dipilih
                     </td>
                   </tr>
                 ) : (
                   rows.map((row, idx) => (
                     <tr key={`${row.nomorFaktur}-${row.kodeBarang}-${idx}`} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-primary whitespace-nowrap">
-                        {row.nomorFaktur}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
-                        {formatTanggal(row.tanggal)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                        {row.kodeBarang || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-foreground font-semibold">
-                        {row.namaBarang}
-                      </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
-                        {row.kategoriBarang ? (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/15 font-semibold text-[11px]">
-                            {row.kategoriBarang}
-                          </span>
-                        ) : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-foreground">
-                        {row.namaCustomer || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
-                        {row.namaSalesman || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-right font-semibold text-foreground whitespace-nowrap">
-                        {(row.kuantitas || 0).toLocaleString('id-ID')}
-                        {row.satuan ? <span className="text-muted-foreground font-normal ml-1">{row.satuan}</span> : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-right text-foreground whitespace-nowrap">
-                        {formatRupiah(row.hargaSatuan)}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-right whitespace-nowrap">
-                        {row.diskon > 0 ? (
-                          <span className="text-rose-500 font-semibold">-{formatRupiah(row.diskon)}</span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
-                        {formatRupiah(row.totalHarga)}
-                      </td>
+                      {isColVisible('nomorFaktur') && (
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-primary whitespace-nowrap">
+                          {row.nomorFaktur}
+                        </td>
+                      )}
+                      {isColVisible('tanggal') && (
+                        <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
+                          {formatTanggal(row.tanggal)}
+                        </td>
+                      )}
+                      {isColVisible('kodeBarang') && (
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                          {row.kodeBarang || '-'}
+                        </td>
+                      )}
+                      {isColVisible('namaBarang') && (
+                        <td className="px-4 py-3 text-xs text-foreground font-semibold">
+                          {row.namaBarang}
+                        </td>
+                      )}
+                      {isColVisible('kategoriBarang') && (
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.kategoriBarang ? (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/15 font-semibold text-[11px]">
+                              {row.kategoriBarang}
+                            </span>
+                          ) : '-'}
+                        </td>
+                      )}
+                      {isColVisible('namaCustomer') && (
+                        <td className="px-4 py-3 text-xs text-foreground">
+                          {row.namaCustomer || '-'}
+                        </td>
+                      )}
+                      {isColVisible('namaSalesman') && (
+                        <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
+                          {row.namaSalesman || '-'}
+                        </td>
+                      )}
+                      {isColVisible('namaCabang') && (
+                        <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">
+                          {row.namaCabang || '-'}
+                        </td>
+                      )}
+                      {isColVisible('kuantitas') && (
+                        <td className="px-4 py-3 text-xs text-right font-semibold text-foreground whitespace-nowrap">
+                          {(row.kuantitas || 0).toLocaleString('id-ID')}
+                          {row.satuan ? <span className="text-muted-foreground font-normal ml-1">{row.satuan}</span> : null}
+                        </td>
+                      )}
+                      {isColVisible('hargaSatuan') && (
+                        <td className="px-4 py-3 text-xs text-right text-foreground whitespace-nowrap">
+                          {formatRupiah(row.hargaSatuan)}
+                        </td>
+                      )}
+                      {isColVisible('diskon') && (
+                        <td className="px-4 py-3 text-xs text-right whitespace-nowrap">
+                          {row.diskon > 0 ? (
+                            <span className="text-rose-500 font-semibold">-{formatRupiah(row.diskon)}</span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                      )}
+                      {isColVisible('totalHarga') && (
+                        <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
+                          {formatRupiah(row.totalHarga)}
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -278,19 +464,27 @@ export default function RincianPenjualanPerBarangPage() {
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="bg-muted/50 border-t-2 border-border">
-                    <td colSpan={7} className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    <td
+                      colSpan={Math.max(1, visibleColumns.filter((c) => !['kuantitas', 'diskon', 'totalHarga'].includes(c)).length)}
+                      className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wider"
+                    >
                       Subtotal halaman ini ({rows.length} baris)
                     </td>
-                    <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
-                      {rows.reduce((s, r) => s + (r.kuantitas || 0), 0).toLocaleString('id-ID')}
-                    </td>
-                    <td className="px-4 py-3" />
-                    <td className="px-4 py-3 text-xs text-right font-bold text-rose-500 whitespace-nowrap">
-                      -{formatRupiah(rows.reduce((s, r) => s + (r.diskon || 0), 0))}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-right font-bold text-primary whitespace-nowrap">
-                      {formatRupiah(grandTotal)}
-                    </td>
+                    {isColVisible('kuantitas') && (
+                      <td className="px-4 py-3 text-xs text-right font-bold text-foreground whitespace-nowrap">
+                        {rows.reduce((s, r) => s + (r.kuantitas || 0), 0).toLocaleString('id-ID')}
+                      </td>
+                    )}
+                    {isColVisible('diskon') && (
+                      <td className="px-4 py-3 text-xs text-right font-bold text-rose-500 whitespace-nowrap">
+                        -{formatRupiah(rows.reduce((s, r) => s + (r.diskon || 0), 0))}
+                      </td>
+                    )}
+                    {isColVisible('totalHarga') && (
+                      <td className="px-4 py-3 text-xs text-right font-bold text-primary whitespace-nowrap">
+                        {formatRupiah(grandTotal)}
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               )}

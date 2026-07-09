@@ -20,6 +20,10 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
   const limit     = parseInt(req.query.limit as string || '20', 10);
   const skip      = (page - 1) * limit;
 
+  // branchIds: comma-separated Accurate branch IDs, e.g. "1,2,3"
+  const branchIdsParam = (req.query.branchIds as string || '').trim();
+  const branchIds = branchIdsParam ? branchIdsParam.split(',').filter(Boolean) : [];
+
   // ── MOCK / DEV MODE ─────────────────────────────────────────────────────────
   // Baca dari DB lokal (data asli Accurate yang sudah di-sync sebelumnya)
   if (config.accurate.mock) {
@@ -62,6 +66,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
         kategoriBarang: '',
         namaCustomer:  r.nama_pelanggan,
         namaSalesman:  r.nama_tenaga_penjual,
+        namaCabang:    '',
         kuantitas:     Number(r.kuantitas),
         satuan:        'Unit',
         hargaSatuan:   Number(r.harga),
@@ -99,13 +104,14 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     const headers = await AccurateService.getApiTokenHeaders();
 
     const params: Record<string, string> = {
-      fields:   'number,transDate,customer,salesman,detailList',
+      fields:   'number,transDate,customer,salesman,branch,detailList',
       pageSize: String(limit),
       page:     String(page),
     };
 
     if (startDate) params.startDate = startDate;
     if (endDate)   params.endDate   = endDate;
+    if (branchIds.length === 1) params['filter.branchId'] = branchIds[0];
 
     logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page}`);
 
@@ -126,6 +132,10 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     const rows: any[] = [];
 
     for (const inv of invoices) {
+      if (branchIds.length > 0 && !branchIds.includes(String(inv.branch?.id ?? ''))) {
+        continue;
+      }
+
       for (const line of (inv.detailList || [])) {
         const namaBarang = line.item?.name  || line.itemName || '';
         const kodeBarang = line.item?.no    || line.itemNo   || '';
@@ -154,6 +164,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           kategoriBarang: line.item?.itemCategory?.name || '',
           namaCustomer:   inv.customer?.name || '',
           namaSalesman:   inv.salesman?.name || '',
+          namaCabang:     inv.branch?.name || '',
           kuantitas,
           satuan:         line.unit?.name || line.unitName || 'Unit',
           hargaSatuan,
@@ -189,6 +200,61 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     logger.error('Gagal fetch rincian penjualan per barang dari Accurate:', msg);
     return res.status(502).json({
       message: `Gagal mengambil data dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
+    });
+  }
+}
+
+/**
+ * GET /report/cabang
+ *
+ * Daftar cabang (branch) dari Accurate, untuk mengisi filter cabang pada laporan.
+ */
+export async function getCabangList(_req: AuthenticatedRequest, res: Response) {
+  if (config.accurate.mock) {
+    return res.status(200).json({ data: [], source: 'db' });
+  }
+
+  try {
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      return res.status(401).json({
+        message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
+        code: 'NOT_CONNECTED',
+      });
+    }
+
+    const headers = await AccurateService.getApiTokenHeaders();
+
+    const response = await axios.get(`${host}/accurate/api/branch/list.do`, {
+      params: { fields: 'id,name', pageSize: '100' },
+      headers,
+      maxRedirects: 5,
+    });
+
+    if (!response.data || !response.data.s) {
+      const errMsg = response.data?.d || response.data?.message || 'Response tidak valid dari Accurate';
+      logger.error('Accurate API error (branch/list):', errMsg);
+      return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
+    }
+
+    const branches: any[] = response.data.d || [];
+    const data = branches.map((b) => ({ id: b.id, nama: b.name }));
+
+    return res.status(200).json({ data, source: 'accurate' });
+  } catch (error: any) {
+    const status = error.response?.status;
+    const msg    = error.response?.data?.d || error.response?.data?.message || error.message;
+
+    if (status === 401) {
+      return res.status(401).json({
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    logger.error('Gagal fetch daftar cabang dari Accurate:', msg);
+    return res.status(502).json({
+      message: `Gagal mengambil daftar cabang dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
     });
   }
 }

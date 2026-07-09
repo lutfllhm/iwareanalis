@@ -160,6 +160,12 @@ router.get(
 );
 
 router.get(
+  '/report/cabang',
+  authenticateToken as any,
+  reportController.getCabangList as any
+);
+
+router.get(
   '/report/daftar-faktur-penjualan',
   authenticateToken as any,
   reportController.getDaftarFakturPenjualan as any
