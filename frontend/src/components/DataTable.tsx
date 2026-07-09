@@ -34,6 +34,7 @@ interface DataTableProps<T> {
   // Additional controls
   extraHeaderControls?: React.ReactNode;
   exportFileName?: string;
+  showExportButtons?: boolean;
 }
 
 export default function DataTable<T extends Record<string, any>>({
@@ -55,6 +56,7 @@ export default function DataTable<T extends Record<string, any>>({
   onDateRangeChange,
   extraHeaderControls,
   exportFileName = 'data_export',
+  showExportButtons = true,
 }: DataTableProps<T>) {
 
   const handleSortClick = (colKey: string) => {
@@ -162,27 +164,29 @@ export default function DataTable<T extends Record<string, any>>({
         {/* Buttons / Actions */}
         <div className="flex items-center flex-wrap gap-2.5">
           {extraHeaderControls}
-          
-          <div className="flex items-center bg-secondary rounded-xl p-1 border border-border">
-            <button
-              onClick={handleExportExcel}
-              disabled={data.length === 0}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-foreground hover:bg-card hover:shadow-sm disabled:opacity-50 disabled:hover:bg-transparent transition-all duration-150"
-              title="Ekspor ke Excel"
-            >
-              <FileSpreadsheet size={14} className="text-emerald-500" />
-              <span className="hidden sm:inline">Excel</span>
-            </button>
-            <button
-              onClick={handleExportCSV}
-              disabled={data.length === 0}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-foreground hover:bg-card hover:shadow-sm disabled:opacity-50 disabled:hover:bg-transparent transition-all duration-150"
-              title="Ekspor ke CSV"
-            >
-              <Download size={14} className="text-primary" />
-              <span className="hidden sm:inline">CSV</span>
-            </button>
-          </div>
+
+          {showExportButtons && (
+            <div className="flex items-center bg-secondary rounded-xl p-1 border border-border">
+              <button
+                onClick={handleExportExcel}
+                disabled={data.length === 0}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-foreground hover:bg-card hover:shadow-sm disabled:opacity-50 disabled:hover:bg-transparent transition-all duration-150"
+                title="Ekspor ke Excel"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-500" />
+                <span className="hidden sm:inline">Excel</span>
+              </button>
+              <button
+                onClick={handleExportCSV}
+                disabled={data.length === 0}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-foreground hover:bg-card hover:shadow-sm disabled:opacity-50 disabled:hover:bg-transparent transition-all duration-150"
+                title="Ekspor ke CSV"
+              >
+                <Download size={14} className="text-primary" />
+                <span className="hidden sm:inline">CSV</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

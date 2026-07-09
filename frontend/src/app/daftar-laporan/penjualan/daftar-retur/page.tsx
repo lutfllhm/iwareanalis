@@ -112,7 +112,7 @@ export default function ReturPenjualanPage() {
               className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-600/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
             >
               <Download size={15} className={isDownloading ? 'animate-pulse' : ''} />
-              <span>{isDownloading ? 'Mengunduh...' : 'Unduh Semua'}</span>
+              <span>{isDownloading ? 'Mengunduh...' : 'Unduh Database'}</span>
             </button>
           )}
         </div>
@@ -154,6 +154,7 @@ export default function ReturPenjualanPage() {
         endDate={endDate}
         onDateRangeChange={(start, end) => { setStartDate(start); setEndDate(end); setPage(1); }}
         exportFileName="retur_penjualan"
+        showExportButtons={false}
       />
     </DashboardLayout>
   );

@@ -153,7 +153,7 @@ export default function DaftarFakturPenjualanPage() {
               className="flex items-center space-x-2"
             >
               <Download className="h-4 w-4" />
-              <span>Download CSV</span>
+              <span>Unduh Database</span>
             </Button>
           </div>
         </div>

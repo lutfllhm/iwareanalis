@@ -2,12 +2,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import {
   FileText, Calendar, Search, ChevronLeft, ChevronRight,
-  AlertCircle, Loader2, ShoppingBag, Settings, Columns3, Building2, Check, Download, FileSpreadsheet
+  AlertCircle, Loader2, ShoppingBag, Settings, Columns3, Building2, Check, Download
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useDownload } from '@/hooks/useDownload';
@@ -169,42 +168,6 @@ export default function RincianPenjualanPerBarangPage() {
   const errorCode = (error as any)?.response?.data?.code;
   const errorMsg = (error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate';
 
-  // Export data yang sedang tampil (halaman saat ini, sesuai kolom yang dipilih)
-  const buildExportRows = () => {
-    const visibleCols = ALL_COLUMNS.filter((c) => isColVisible(c.key));
-    return rows.map((row) => {
-      const item: Record<string, any> = {};
-      visibleCols.forEach((col) => {
-        const raw = (row as any)[col.key];
-        item[col.label] = col.key === 'tanggal' ? formatTanggal(raw) : raw;
-      });
-      return item;
-    });
-  };
-
-  const handleExportExcel = () => {
-    if (rows.length === 0) return;
-    const worksheet = XLSX.utils.json_to_sheet(buildExportRows());
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
-    XLSX.writeFile(workbook, `rincian_penjualan_${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const handleExportCSV = () => {
-    if (rows.length === 0) return;
-    const worksheet = XLSX.utils.json_to_sheet(buildExportRows());
-    const csvContent = XLSX.utils.sheet_to_csv(worksheet);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `rincian_penjualan_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <DashboardLayout>
       {/* Header */}
@@ -250,7 +213,7 @@ export default function RincianPenjualanPerBarangPage() {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-600/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
             >
               <Download size={15} className={isDownloading ? 'animate-pulse' : ''} />
-              <span>{isDownloading ? 'Mengunduh...' : 'Unduh Semua'}</span>
+              <span>{isDownloading ? 'Mengunduh...' : 'Unduh Database'}</span>
             </button>
           )}
         </div>
@@ -281,27 +244,6 @@ export default function RincianPenjualanPerBarangPage() {
               onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
               className="bg-transparent text-xs text-foreground focus:outline-none w-28 font-semibold"
             />
-          </div>
-
-          {/* Export tampilan saat ini */}
-          <div className="flex items-center gap-1.5 bg-background border border-border rounded-xl px-2 py-1.5">
-            <button
-              onClick={handleExportExcel}
-              disabled={rows.length === 0}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <FileSpreadsheet size={14} />
-              Excel
-            </button>
-            <div className="w-px h-4 bg-border" />
-            <button
-              onClick={handleExportCSV}
-              disabled={rows.length === 0}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <Download size={14} />
-              CSV
-            </button>
           </div>
 
           {/* Branch (cabang) multi-select — sementara dinonaktifkan, lihat CABANG_FILTER_ENABLED */}
