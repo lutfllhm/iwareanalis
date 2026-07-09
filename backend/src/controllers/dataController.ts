@@ -4,23 +4,30 @@ import prisma from '../services/db';
 import logger from '../services/logger';
 
 /**
- * Helper: Convert array of objects to CSV string
+ * Helper: Convert array of objects to SQL INSERT statements for a given table
  */
-function toCSV(rows: Record<string, any>[]): string {
-  if (rows.length === 0) return '';
-  const headers = Object.keys(rows[0]);
-  const escape = (v: any): string => {
-    const s = v == null ? '' : String(v);
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
+function toSQLInsert(tableName: string, rows: Record<string, any>[]): string {
+  if (rows.length === 0) return `-- Tidak ada data pada tabel ${tableName}\n`;
+
+  const columns = Object.keys(rows[0]);
+  const escapeValue = (v: any): string => {
+    if (v == null) return 'NULL';
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'boolean') return v ? '1' : '0';
+    if (v instanceof Date) return `'${v.toISOString().slice(0, 19).replace('T', ' ')}'`;
+    if (typeof v === 'object' && typeof v.toNumber === 'function') return v.toNumber().toString(); // Prisma Decimal
+    return `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
   };
-  const lines = [headers.join(',')];
+
+  const lines = [
+    `-- Export tabel ${tableName} (${rows.length} baris) — ${new Date().toISOString()}`,
+    '',
+  ];
   for (const row of rows) {
-    lines.push(headers.map((h) => escape(row[h])).join(','));
+    const values = columns.map((c) => escapeValue(row[c])).join(', ');
+    lines.push(`INSERT INTO \`${tableName}\` (${columns.map((c) => `\`${c}\``).join(', ')}) VALUES (${values});`);
   }
-  return lines.join('\n');
+  return lines.join('\n') + '\n';
 }
 
 /**
@@ -373,7 +380,7 @@ export async function getReturPenjualan(req: AuthenticatedRequest, res: Response
 // ============================================================
 
 /**
- * Download all Barang & Jasa as CSV
+ * Download all Barang & Jasa as SQL
  */
 export async function downloadBarangJasa(_req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('barang-jasa'))) {
@@ -381,11 +388,11 @@ export async function downloadBarangJasa(_req: AuthenticatedRequest, res: Respon
   }
   try {
     const rows = await prisma.barangJasa.findMany({ orderBy: { kode_barang: 'asc' } });
-    const csv = toCSV(rows as any[]);
-    const filename = `barang_jasa_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const sql = toSQLInsert('barang_jasa', rows as any[]);
+    const filename = `barang_jasa_${new Date().toISOString().split('T')[0]}.sql`;
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send('\uFEFF' + csv); // BOM for Excel UTF-8
+    return res.status(200).send(sql);
   } catch (error) {
     logger.error('Failed to download barang_jasa:', error);
     return res.status(500).json({ message: 'Gagal mengunduh data barang dan jasa' });
@@ -393,7 +400,7 @@ export async function downloadBarangJasa(_req: AuthenticatedRequest, res: Respon
 }
 
 /**
- * Download all Pelanggan as CSV
+ * Download all Pelanggan as SQL
  */
 export async function downloadPelanggan(_req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('pelanggan'))) {
@@ -401,11 +408,11 @@ export async function downloadPelanggan(_req: AuthenticatedRequest, res: Respons
   }
   try {
     const rows = await prisma.pelanggan.findMany({ orderBy: { id_pelanggan: 'asc' } });
-    const csv = toCSV(rows as any[]);
-    const filename = `pelanggan_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const sql = toSQLInsert('pelanggan', rows as any[]);
+    const filename = `pelanggan_${new Date().toISOString().split('T')[0]}.sql`;
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send('\uFEFF' + csv);
+    return res.status(200).send(sql);
   } catch (error) {
     logger.error('Failed to download pelanggan:', error);
     return res.status(500).json({ message: 'Gagal mengunduh data pelanggan' });
@@ -413,7 +420,7 @@ export async function downloadPelanggan(_req: AuthenticatedRequest, res: Respons
 }
 
 /**
- * Download all Faktur Penjualan as CSV
+ * Download all Faktur Penjualan as SQL
  */
 export async function downloadFakturPenjualan(_req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('faktur-penjualan'))) {
@@ -435,11 +442,11 @@ export async function downloadFakturPenjualan(_req: AuthenticatedRequest, res: R
       pembayaran: r.pembayaran,
       synced_at: r.synced_at,
     }));
-    const csv = toCSV(flat);
-    const filename = `faktur_penjualan_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const sql = toSQLInsert('faktur_penjualan', flat);
+    const filename = `faktur_penjualan_${new Date().toISOString().split('T')[0]}.sql`;
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send('\uFEFF' + csv);
+    return res.status(200).send(sql);
   } catch (error) {
     logger.error('Failed to download faktur_penjualan:', error);
     return res.status(500).json({ message: 'Gagal mengunduh data faktur penjualan' });
@@ -447,7 +454,7 @@ export async function downloadFakturPenjualan(_req: AuthenticatedRequest, res: R
 }
 
 /**
- * Download all Rincian Penjualan as CSV
+ * Download all Rincian Penjualan as SQL
  */
 export async function downloadRincianPenjualan(_req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('rincian-penjualan'))) {
@@ -455,11 +462,11 @@ export async function downloadRincianPenjualan(_req: AuthenticatedRequest, res: 
   }
   try {
     const rows = await prisma.rincianPenjualanBarang.findMany({ orderBy: { tanggal: 'desc' } });
-    const csv = toCSV(rows as any[]);
-    const filename = `rincian_penjualan_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const sql = toSQLInsert('rincian_penjualan_barang', rows as any[]);
+    const filename = `rincian_penjualan_${new Date().toISOString().split('T')[0]}.sql`;
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send('\uFEFF' + csv);
+    return res.status(200).send(sql);
   } catch (error) {
     logger.error('Failed to download rincian_penjualan:', error);
     return res.status(500).json({ message: 'Gagal mengunduh data rincian penjualan' });
@@ -467,7 +474,7 @@ export async function downloadRincianPenjualan(_req: AuthenticatedRequest, res: 
 }
 
 /**
- * Download all Retur Penjualan as CSV
+ * Download all Retur Penjualan as SQL
  */
 export async function downloadReturPenjualan(_req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('retur-penjualan'))) {
@@ -490,11 +497,11 @@ export async function downloadReturPenjualan(_req: AuthenticatedRequest, res: Re
       nilai_retur_faktur: r.nilai_retur_faktur,
       synced_at: r.synced_at,
     }));
-    const csv = toCSV(flat);
-    const filename = `retur_penjualan_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const sql = toSQLInsert('retur_penjualan', flat);
+    const filename = `retur_penjualan_${new Date().toISOString().split('T')[0]}.sql`;
+    res.setHeader('Content-Type', 'application/sql; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return res.status(200).send('\uFEFF' + csv);
+    return res.status(200).send(sql);
   } catch (error) {
     logger.error('Failed to download retur_penjualan:', error);
     return res.status(500).json({ message: 'Gagal mengunduh data retur penjualan' });

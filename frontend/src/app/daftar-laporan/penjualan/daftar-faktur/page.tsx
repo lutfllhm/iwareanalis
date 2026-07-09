@@ -86,7 +86,7 @@ export default function DaftarFakturPenjualanPage() {
       link.href = url;
       link.setAttribute(
         'download',
-        `faktur_penjualan_${new Date().toISOString().split('T')[0]}.csv`
+        `faktur_penjualan_${new Date().toISOString().split('T')[0]}.sql`
       );
       document.body.appendChild(link);
       link.click();
