@@ -108,7 +108,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     }
 
     const params: Record<string, string> = {
-      fields:   'number,transDate,customer,salesman,detailList',
+      fields:   'id,number,transDate,customer,salesman',
       pageSize: String(limit),
       page:     String(page),
     };
@@ -130,12 +130,34 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
     }
 
-    const invoices: any[] = response.data.d || [];
+    const invoiceSummaries: any[] = response.data.d || [];
     const sp = response.data.sp || {};
     const rows: any[] = [];
 
-    const detailCounts = invoices.map((inv) => (inv.detailList || []).length);
-    logger.info(`Accurate response: invoices=${invoices.length} rowCount=${sp.rowCount} pageCount=${sp.pageCount} detailCounts=${JSON.stringify(detailCounts).slice(0, 200)}`);
+    // /sales-invoice/list.do tidak mengembalikan detailList terisi — perlu
+    // panggil endpoint detail per invoice untuk mendapatkan rincian barangnya.
+    let loggedSample = false;
+    const detailResults = await Promise.all(
+      invoiceSummaries.map(async (inv) => {
+        try {
+          const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+            params: { id: inv.id },
+            headers,
+            maxRedirects: 5,
+          });
+          if (!loggedSample) {
+            loggedSample = true;
+            logger.info(`Sample detail.do response keys=${Object.keys(detailRes.data?.d || {}).join(',')}`);
+          }
+          return { ...inv, detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [] };
+        } catch (detailErr: any) {
+          logger.error(`Gagal ambil detail invoice id=${inv.id}: ${detailErr.message}`);
+          return { ...inv, detailList: [] };
+        }
+      })
+    );
+
+    const invoices = detailResults;
 
     for (const inv of invoices) {
       for (const line of (inv.detailList || [])) {
