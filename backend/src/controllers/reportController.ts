@@ -113,9 +113,9 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     if (endDate)   params.endDate   = endDate;
     if (branchIds.length === 1) params['filter.branchId'] = branchIds[0];
 
-    logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page}`);
+    logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page} fields=${params.fields}`);
 
-    const response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
+    let response = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
       params,
       headers,
       maxRedirects: 5,
@@ -127,12 +127,39 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
     }
 
-    const invoices: any[] = response.data.d || [];
-    const sp = response.data.sp || {};
+    let invoices: any[] = response.data.d || [];
+    let sp = response.data.sp || {};
+    let branchDataAvailable = true;
+
+    // Field "branch" kadang tidak dikenali Accurate untuk endpoint ini dan membuat
+    // detailList kosong tanpa error eksplisit. Kalau rowCount > 0 tapi tidak ada
+    // baris terisi, coba ulang tanpa field branch (tanpa data cabang).
+    const hasAnyDetail = invoices.some((inv) => (inv.detailList || []).length > 0);
+    if (!hasAnyDetail && (sp.rowCount || 0) > 0) {
+      logger.warn(`Response kosong dengan field branch (rowCount=${sp.rowCount}), mencoba ulang tanpa field branch`);
+      const fallbackParams = { ...params, fields: 'number,transDate,customer,salesman,detailList' };
+      const fallbackRes = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
+        params: fallbackParams,
+        headers,
+        maxRedirects: 5,
+      });
+      if (fallbackRes.data?.s) {
+        invoices = fallbackRes.data.d || [];
+        sp = fallbackRes.data.sp || {};
+        branchDataAvailable = false;
+      }
+    }
+
+    if (!branchDataAvailable && branchIds.length > 0) {
+      return res.status(502).json({
+        message: 'Filter cabang tidak dapat diterapkan saat ini karena Accurate tidak mengembalikan data cabang pada laporan ini. Silakan hapus filter cabang atau coba lagi nanti.',
+      });
+    }
+
     const rows: any[] = [];
 
     for (const inv of invoices) {
-      if (branchIds.length > 0 && !branchIds.includes(String(inv.branch?.id ?? ''))) {
+      if (branchDataAvailable && branchIds.length > 0 && !branchIds.includes(String(inv.branch?.id ?? ''))) {
         continue;
       }
 
