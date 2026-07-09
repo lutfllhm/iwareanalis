@@ -28,7 +28,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
   // Baca dari DB lokal (data asli Accurate yang sudah di-sync sebelumnya)
   if (config.accurate.mock) {
     logger.info('getRincianPenjualanPerBarang — membaca dari DB lokal (mock/dev mode)');
-    try {
+    try { 
       const where: any = {};
 
       if (startDate && endDate) {
@@ -133,6 +133,9 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     const invoices: any[] = response.data.d || [];
     const sp = response.data.sp || {};
     const rows: any[] = [];
+
+    const detailCounts = invoices.map((inv) => (inv.detailList || []).length);
+    logger.info(`Accurate response: invoices=${invoices.length} rowCount=${sp.rowCount} pageCount=${sp.pageCount} detailCounts=${JSON.stringify(detailCounts).slice(0, 200)}`);
 
     for (const inv of invoices) {
       for (const line of (inv.detailList || [])) {
