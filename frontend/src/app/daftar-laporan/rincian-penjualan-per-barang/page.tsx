@@ -6,9 +6,10 @@ import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
 import {
   FileText, Calendar, Search, ChevronLeft, ChevronRight,
-  AlertCircle, Loader2, ShoppingBag, Settings, Columns3, Building2, Check
+  AlertCircle, Loader2, ShoppingBag, Settings, Columns3, Building2, Check, Download
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useDownload } from '@/hooks/useDownload';
 
 interface RincianRow {
   nomorFaktur: string;
@@ -75,6 +76,13 @@ export default function RincianPenjualanPerBarangPage() {
   const [limit] = useState(20);
   const [q, setQ] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  const { canDownload, isDownloading, handleDownload } = useDownload(
+    'rincian-penjualan',
+    '/data/rincian-penjualan/download',
+    'rincian_penjualan'
+  );
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -190,11 +198,32 @@ export default function RincianPenjualanPerBarangPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border rounded-xl px-3 py-2">
-          <FileText size={14} className="text-primary" />
-          <span className="font-semibold">Daftar Laporan / Penjualan</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border rounded-xl px-3 py-2">
+            <FileText size={14} className="text-primary" />
+            <span className="font-semibold">Daftar Laporan / Penjualan</span>
+          </div>
+          {canDownload && (
+            <button
+              onClick={() => handleDownload(
+                (msg) => { setToast({ type: 'success', msg }); setTimeout(() => setToast(null), 3000); },
+                (msg) => { setToast({ type: 'error', msg }); setTimeout(() => setToast(null), 4000); }
+              )}
+              disabled={isDownloading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-600/20 hover:opacity-90 disabled:opacity-50 transition-opacity text-sm"
+            >
+              <Download size={15} className={isDownloading ? 'animate-pulse' : ''} />
+              <span>{isDownloading ? 'Mengunduh...' : 'Unduh Semua'}</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {toast && (
+        <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-semibold text-white ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+          {toast.msg}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
