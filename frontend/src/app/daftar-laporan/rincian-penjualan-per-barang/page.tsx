@@ -51,7 +51,7 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'totalHarga', label: 'Total' },
 ];
 
-const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map((c) => c.key);
+const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map((c) => c.key).filter((k) => k !== 'namaCabang');
 
 const formatRupiah = (val: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -114,16 +114,10 @@ export default function RincianPenjualanPerBarangPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const { data: cabangData } = useQuery({
-    queryKey: ['accurateCabangList'],
-    queryFn: async () => {
-      const res = await api.get('/report/cabang');
-      return res.data;
-    },
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-  });
-  const cabangList: Cabang[] = cabangData?.data || [];
+  // Filter cabang sementara dinonaktifkan: field "branch" belum stabil di sisi Accurate
+  // untuk laporan ini (menyebabkan response kosong). cabangList dibiarkan kosong.
+  const CABANG_FILTER_ENABLED = false;
+  const cabangList: Cabang[] = [];
 
   const toggleCabang = (id: string) => {
     setSelectedCabang((prev) =>
@@ -141,13 +135,10 @@ export default function RincianPenjualanPerBarangPage() {
   const isColVisible = (key: string) => visibleColumns.includes(key);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate, selectedCabang],
+    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate],
     queryFn: async () => {
       const res = await api.get('/report/rincian-penjualan-per-barang', {
-        params: {
-          page, limit, q, startDate, endDate,
-          branchIds: selectedCabang.length ? selectedCabang.join(',') : undefined,
-        },
+        params: { page, limit, q, startDate, endDate },
       });
       return res.data;
     },
@@ -226,44 +217,46 @@ export default function RincianPenjualanPerBarangPage() {
             />
           </div>
 
-          {/* Branch (cabang) multi-select */}
-          <div className="relative" ref={cabangRef}>
-            <button
-              onClick={() => setCabangOpen((o) => !o)}
-              className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
-            >
-              <Building2 size={15} className="text-muted-foreground" />
-              {selectedCabang.length === 0
-                ? 'Semua Cabang'
-                : `${selectedCabang.length} Cabang dipilih`}
-            </button>
-            {cabangOpen && (
-              <div className="absolute z-20 mt-2 w-64 max-h-72 overflow-y-auto bg-card border border-border rounded-xl shadow-lg p-2">
-                {cabangList.length === 0 ? (
-                  <p className="text-xs text-muted-foreground px-2 py-3 text-center">
-                    Tidak ada data cabang (hanya tersedia di mode Live Accurate)
-                  </p>
-                ) : (
-                  cabangList.map((c) => {
-                    const id = String(c.id);
-                    const checked = selectedCabang.includes(id);
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => toggleCabang(id)}
-                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted transition-colors text-left"
-                      >
-                        <span className={`flex items-center justify-center w-4 h-4 rounded border ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
-                          {checked && <Check size={12} />}
-                        </span>
-                        {c.nama}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
+          {/* Branch (cabang) multi-select — sementara dinonaktifkan, lihat CABANG_FILTER_ENABLED */}
+          {CABANG_FILTER_ENABLED && (
+            <div className="relative" ref={cabangRef}>
+              <button
+                onClick={() => setCabangOpen((o) => !o)}
+                className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                <Building2 size={15} className="text-muted-foreground" />
+                {selectedCabang.length === 0
+                  ? 'Semua Cabang'
+                  : `${selectedCabang.length} Cabang dipilih`}
+              </button>
+              {cabangOpen && (
+                <div className="absolute z-20 mt-2 w-64 max-h-72 overflow-y-auto bg-card border border-border rounded-xl shadow-lg p-2">
+                  {cabangList.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                      Tidak ada data cabang (hanya tersedia di mode Live Accurate)
+                    </p>
+                  ) : (
+                    cabangList.map((c) => {
+                      const id = String(c.id);
+                      const checked = selectedCabang.includes(id);
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => toggleCabang(id)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-foreground hover:bg-muted transition-colors text-left"
+                        >
+                          <span className={`flex items-center justify-center w-4 h-4 rounded border ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border'}`}>
+                            {checked && <Check size={12} />}
+                          </span>
+                          {c.nama}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Search box */}
           <div className="flex-1 flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
