@@ -3,6 +3,14 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import prisma from '../services/db';
 import logger from '../services/logger';
 
+// endDate query params arrive as "YYYY-MM-DD", which Date parses as UTC midnight.
+// Without this, `lte: end` would exclude every transaction on the end date itself.
+function endOfDay(dateStr: string): Date {
+  const d = new Date(dateStr);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
 /**
  * Get Dashboard KPIs and Period Comparisons
  */
@@ -16,7 +24,7 @@ export async function getKPIs(req: AuthenticatedRequest, res: Response) {
 
   try {
     const currStart = new Date(startDateStr);
-    const currEnd = new Date(endDateStr);
+    const currEnd = endOfDay(endDateStr);
 
     // Calculate previous period dates for comparison (same duration)
     const durationMs = currEnd.getTime() - currStart.getTime();
@@ -109,7 +117,7 @@ export async function getSalesTrend(req: AuthenticatedRequest, res: Response) {
 
   try {
     const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
+    const end = endOfDay(endDateStr);
 
     const invoices = await prisma.fakturPenjualan.findMany({
       where: { tanggal: { gte: start, lte: end } },
@@ -148,7 +156,7 @@ export async function getTopProducts(req: AuthenticatedRequest, res: Response) {
 
   try {
     const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
+    const end = endOfDay(endDateStr);
 
     const rincian = await prisma.rincianPenjualanBarang.findMany({
       where: { tanggal: { gte: start, lte: end } },
@@ -189,7 +197,7 @@ export async function getCategoryRatios(req: AuthenticatedRequest, res: Response
 
   try {
     const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
+    const end = endOfDay(endDateStr);
 
     // Fetch lines along with item category mapping
     const rincian = await prisma.rincianPenjualanBarang.findMany({
@@ -230,7 +238,7 @@ export async function getSalespersonPerformance(req: AuthenticatedRequest, res: 
 
   try {
     const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
+    const end = endOfDay(endDateStr);
 
     const rincian = await prisma.rincianPenjualanBarang.findMany({
       where: {
@@ -269,7 +277,7 @@ export async function getGeoSales(req: AuthenticatedRequest, res: Response) {
 
   try {
     const start = new Date(startDateStr);
-    const end = new Date(endDateStr);
+    const end = endOfDay(endDateStr);
 
     const invoices = await prisma.fakturPenjualan.findMany({
       where: { tanggal: { gte: start, lte: end } },
@@ -394,7 +402,7 @@ export async function getSerialNumberMutation(req: AuthenticatedRequest, res: Re
     const rows = await prisma.mutasiSerialNumber.findMany({
       where: {
         ...(startDateStr && endDateStr
-          ? { tanggal: { gte: new Date(startDateStr), lte: new Date(endDateStr) } }
+          ? { tanggal: { gte: new Date(startDateStr), lte: endOfDay(endDateStr) } }
           : {}),
         ...(kodeBarang ? { kode_barang: kodeBarang } : {}),
         ...(serialNumber ? { serial_number: { contains: serialNumber } } : {}),
@@ -422,7 +430,7 @@ export async function getWorkOrders(req: AuthenticatedRequest, res: Response) {
     const rows = await prisma.workOrder.findMany({
       where: {
         ...(startDateStr && endDateStr
-          ? { tanggal: { gte: new Date(startDateStr), lte: new Date(endDateStr) } }
+          ? { tanggal: { gte: new Date(startDateStr), lte: endOfDay(endDateStr) } }
           : {}),
         ...(status ? { status } : {}),
         ...(kodeBarang ? { kode_barang_hasil: kodeBarang } : {}),
