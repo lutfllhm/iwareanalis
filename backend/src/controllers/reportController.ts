@@ -537,3 +537,88 @@ export async function getDaftarBarangJasa(req: AuthenticatedRequest, res: Respon
     });
   }
 }
+
+/**
+ * GET /report/daftar-pelanggan
+ *
+ * Live proxy langsung ke Accurate API /api/customer/list.do
+ */
+export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Response) {
+  const q      = req.query.q as string || '';
+  const page   = parseInt(req.query.page  as string || '1',  10);
+  const limit  = parseInt(req.query.limit as string || '10', 10);
+
+  try {
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      return res.status(401).json({
+        message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
+        code: 'NOT_CONNECTED',
+      });
+    }
+
+    const headers = await AccurateService.getApiTokenHeaders();
+
+    const params: Record<string, string> = {
+      fields:   'id,name,customerNo,customerGroup,suspended,shipCity,shipProvince,shipStreet,createdTime,salesman,salesman2',
+      pageSize: String(limit),
+      page:     String(page),
+    };
+    if (q) params.keywords = q;
+
+    const response = await axios.get(`${host}/accurate/api/customer/list.do`, {
+      params,
+      headers,
+      maxRedirects: 5,
+    });
+
+    if (!response.data || !response.data.s) {
+      const errMsg = response.data?.d || response.data?.message || 'Response tidak valid dari Accurate';
+      logger.error('Accurate API error (daftar-pelanggan):', errMsg);
+      return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
+    }
+
+    const customers: any[] = response.data.d || [];
+    const sp = response.data.sp || {};
+
+    const rows = customers.map((cust) => ({
+      idPelanggan: cust.customerNo,
+      idKaryawanDefaultPenjual: cust.salesman?.salesNo || '',
+      namaDefaultPenjual: cust.salesman?.name || '',
+      idKaryawanTenagaPenjualKedua: cust.salesman2?.salesNo || '',
+      nama: cust.name,
+      kategoriPelanggan: cust.customerGroup?.name || '',
+      nonAktif: cust.suspended || false,
+      kotaPengiriman: cust.shipCity || '',
+      provinsiPengiriman: cust.shipProvince || '',
+      tglJamPembuatan: cust.createdTime || null,
+      alamatLengkapPengiriman: cust.shipStreet || '',
+    }));
+
+    return res.status(200).json({
+      data: rows,
+      pagination: {
+        page,
+        limit:      sp.pageSize  || limit,
+        total:      sp.rowCount  || rows.length,
+        totalPages: sp.pageCount || 1,
+      },
+      source: 'accurate',
+    });
+  } catch (error: any) {
+    const status = error.response?.status;
+    const msg    = error.response?.data?.d || error.response?.data?.message || error.message;
+
+    if (status === 401) {
+      return res.status(401).json({
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    logger.error('Gagal fetch daftar pelanggan dari Accurate:', msg);
+    return res.status(502).json({
+      message: `Gagal mengambil data dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
+    });
+  }
+}
