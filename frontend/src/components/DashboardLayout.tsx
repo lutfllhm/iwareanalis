@@ -18,8 +18,6 @@ import {
   Sun,
   Moon,
   User as UserIcon,
-  Bell,
-  RefreshCw,
   UserCheck,
 } from 'lucide-react';
 
@@ -58,6 +56,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!item.roles) return true;
     return user && item.roles.includes(user.role);
   });
+
+  const currentPageTitle =
+    sidebarItems.find((item) => pathname === item.href || pathname.startsWith(item.href + '/'))?.name
+    || 'Dashboard';
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -197,8 +199,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <Menu size={20} />
             </button>
-            <h1 className="text-lg font-bold capitalize text-foreground tracking-tight hidden sm:block">
-              {pathname.replace('/', '').replace('-', ' ') || 'Dashboard'}
+            <h1 className="text-lg font-bold text-foreground tracking-tight hidden sm:block">
+              {currentPageTitle}
             </h1>
           </div>
 
@@ -210,12 +212,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               title="Toggle theme"
             >
               {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
-            </button>
-
-            {/* Notifications icon */}
-            <button className="p-2 rounded-xl hover:bg-muted text-muted-foreground relative">
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-card" />
             </button>
 
             <div className="h-8 w-[1px] bg-border" />

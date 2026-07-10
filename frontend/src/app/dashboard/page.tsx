@@ -2,8 +2,17 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
+import ChartTooltip from '@/components/charts/ChartTooltip';
+import { ChartCard, ChartLoadingState, ChartEmptyState } from '@/components/charts/ChartCard';
+import { useTheme } from '@/components/ThemeProvider';
 import api from '@/lib/api';
+import { categoricalColor, formatRupiah as formatRupiahChart, formatCompactRupiah } from '@/lib/chart-theme';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar
+} from 'recharts';
 import {
   TrendingUp,
   FileText,
@@ -14,7 +23,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  PackageSearch,
+  ArrowRight
 } from 'lucide-react';
 
 interface KPICardProps {
@@ -82,6 +93,10 @@ function KPICard({ title, value, growth, icon: Icon, color, isCurrency, isPercen
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -99,6 +114,28 @@ export default function DashboardPage() {
       return res.data;
     },
   });
+
+  // Query ringkasan tren penjualan untuk mini chart
+  const { data: trendData, isLoading: isTrendLoading } = useQuery({
+    queryKey: ['dashboardSalesTrend', startDate, endDate],
+    queryFn: async () => {
+      const res = await api.get('/analytics/sales-trend', { params: { startDate, endDate } });
+      return res.data;
+    },
+  });
+
+  // Query top 5 produk terlaris untuk mini chart
+  const { data: topProducts, isLoading: isProductsLoading } = useQuery({
+    queryKey: ['dashboardTopProducts', startDate, endDate],
+    queryFn: async () => {
+      const res = await api.get('/analytics/top-products', { params: { startDate, endDate, limit: 5 } });
+      return res.data;
+    },
+  });
+
+  const axisColor = isDark ? '#c3c2b7' : '#898781';
+  const gridColor = isDark ? '#2c2c2a' : '#e1e0d9';
+  const trendColor = categoricalColor(0, isDark);
 
   return (
     <DashboardLayout>
@@ -209,6 +246,61 @@ export default function DashboardPage() {
             </h4>
           </div>
         </div>
+      </div>
+
+      {/* Ringkasan Visual: mini charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <ChartCard title="Tren Penjualan" subtitle="30 hari terakhir" height="h-56">
+          {isTrendLoading ? (
+            <ChartLoadingState message="Memuat tren..." />
+          ) : !trendData || trendData.length === 0 ? (
+            <ChartEmptyState icon={TrendingUp} message="Belum ada data tren pada periode ini" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dashColorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={trendColor} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={trendColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis dataKey="tanggal" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} width={56} />
+                <Tooltip content={<ChartTooltip formatter={(v) => formatRupiahChart(Number(v))} />} cursor={{ stroke: gridColor, strokeWidth: 1 }} />
+                <Area type="monotone" dataKey="penjualan" name="Penjualan" stroke={trendColor} strokeWidth={2.5} fillOpacity={1} fill="url(#dashColorSales)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Top 5 Produk Terlaris" subtitle="Berdasarkan revenue" height="h-56">
+          {isProductsLoading ? (
+            <ChartLoadingState message="Memuat produk terlaris..." />
+          ) : !topProducts || topProducts.length === 0 ? (
+            <ChartEmptyState icon={PackageSearch} message="Belum ada data produk pada periode ini" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topProducts.slice(0, 5)} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
+                <XAxis type="number" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} />
+                <YAxis dataKey="nama" type="category" stroke={axisColor} fontSize={9} tickLine={false} axisLine={false} width={92} />
+                <Tooltip content={<ChartTooltip formatter={(v) => formatRupiahChart(Number(v))} />} cursor={{ fill: gridColor, opacity: 0.3 }} />
+                <Bar dataKey="totalSales" name="Total Pendapatan" fill={categoricalColor(0, isDark)} radius={[0, 4, 4, 0]} maxBarSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
+      </div>
+
+      <div className="flex justify-end print:hidden">
+        <button
+          onClick={() => router.push('/laporan')}
+          className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
+        >
+          Lihat Laporan Data Analyst lengkap
+          <ArrowRight size={14} />
+        </button>
       </div>
 
       {/* Quick Dashboard Action Cards */}

@@ -3,18 +3,22 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
+import ChartTooltip from '@/components/charts/ChartTooltip';
+import { ChartCard, ChartLoadingState, ChartEmptyState } from '@/components/charts/ChartCard';
+import { useTheme } from '@/components/ThemeProvider';
 import api from '@/lib/api';
+import { categoricalColor, formatRupiah, formatCompactRupiah } from '@/lib/chart-theme';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, PieChart, Pie, Legend, LineChart, Line
 } from 'recharts';
-import { Calendar, Download, Printer, ArrowUpRight, ShieldAlert } from 'lucide-react';
-
-const COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#e11d48', '#10b981', '#f59e0b'];
+import { Calendar, Printer, TrendingUp, PackageSearch, PieChart as PieChartIcon, MapPin, Users2, LineChart as LineChartIcon } from 'lucide-react';
 
 export default function LaporanPage() {
   const [mounted, setMounted] = useState(false);
-  
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
   // Date range state
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -23,21 +27,9 @@ export default function LaporanPage() {
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Drilldown states
-  const [drilldownCategory, setDrilldownCategory] = useState<string | null>(null);
-
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Fetch KPI dashboard data
-  const { data: kpis } = useQuery({
-    queryKey: ['reportKpis', startDate, endDate],
-    queryFn: async () => {
-      const res = await api.get('/analytics/kpis', { params: { startDate, endDate } });
-      return res.data;
-    },
-  });
 
   // Fetch Sales Trend
   const { data: trendData, isLoading: isTrendLoading } = useQuery({
@@ -58,7 +50,7 @@ export default function LaporanPage() {
   });
 
   // Fetch Categories
-  const { data: categories } = useQuery({
+  const { data: categories, isLoading: isCategoriesLoading } = useQuery({
     queryKey: ['categoryRatios', startDate, endDate],
     queryFn: async () => {
       const res = await api.get('/analytics/category-ratios', { params: { startDate, endDate } });
@@ -67,7 +59,7 @@ export default function LaporanPage() {
   });
 
   // Fetch Sales Performance
-  const { data: salesperson } = useQuery({
+  const { data: salesperson, isLoading: isSalespersonLoading } = useQuery({
     queryKey: ['salespersonPerformance', startDate, endDate],
     queryFn: async () => {
       const res = await api.get('/analytics/sales-performance', { params: { startDate, endDate } });
@@ -76,7 +68,7 @@ export default function LaporanPage() {
   });
 
   // Fetch Geo Sales
-  const { data: geoSales } = useQuery({
+  const { data: geoSales, isLoading: isGeoLoading } = useQuery({
     queryKey: ['geoSales', startDate, endDate],
     queryFn: async () => {
       const res = await api.get('/analytics/geo-sales', { params: { startDate, endDate } });
@@ -94,22 +86,13 @@ export default function LaporanPage() {
   });
 
   // Fetch Forecasting data
-  const { data: forecastData } = useQuery({
+  const { data: forecastData, isLoading: isForecastLoading } = useQuery({
     queryKey: ['forecastData'],
     queryFn: async () => {
       const res = await api.get('/analytics/forecast');
       return res.data;
     },
   });
-
-  // Format currency helper
-  const formatRupiah = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(val);
-  };
 
   const handlePrint = () => {
     window.print();
@@ -124,8 +107,8 @@ export default function LaporanPage() {
       RataRataBergerak: h.movingAverage,
       Prediksi: null
     }));
-    
-    const fore = (forecastData.forecast || []).map((f: any, idx: number) => ({
+
+    const fore = (forecastData.forecast || []).map((f: any) => ({
       name: f.yearMonth,
       Historis: null,
       RataRataBergerak: null,
@@ -155,6 +138,15 @@ export default function LaporanPage() {
         return 'bg-rose-500/10 text-rose-500 border border-rose-500/20';
     }
   };
+
+  const axisColor = isDark ? '#c3c2b7' : '#898781';
+  const gridColor = isDark ? '#2c2c2a' : '#e1e0d9';
+  const trendColor = categoricalColor(0, isDark);
+  const geoColor = categoricalColor(1, isDark);
+  const salespersonColor = categoricalColor(6, isDark);
+  const historisColor = categoricalColor(0, isDark);
+  const movingAvgColor = categoricalColor(1, isDark);
+  const prediksiColor = categoricalColor(2, isDark);
 
   if (!mounted) return null;
 
@@ -208,157 +200,170 @@ export default function LaporanPage() {
 
       {/* 1. VISUALIZATION GRID: RECHARTS WIDGETS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* CHART 1: REVENUE TREND (AREA) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Tren Pendapatan Penjualan</h3>
-            <span className="text-[10px] text-muted-foreground font-semibold">Harian</span>
-          </div>
-          <div className="h-72 w-full">
-            {isTrendLoading ? (
-              <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">Memuat data tren...</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData || []}>
-                  <defs>
-                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="tanggal" stroke="var(--color-muted-foreground)" fontSize={10} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(val) => `${val/1000000}M`} />
-                  <Tooltip formatter={(value) => [formatRupiah(Number(value)), 'Penjualan']} />
-                  <Area type="monotone" dataKey="penjualan" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+        <ChartCard
+          title="Tren Pendapatan Penjualan"
+          badge={<span className="text-[10px] text-muted-foreground font-semibold">Harian</span>}
+        >
+          {isTrendLoading ? (
+            <ChartLoadingState message="Memuat data tren..." />
+          ) : !trendData || trendData.length === 0 ? (
+            <ChartEmptyState icon={TrendingUp} message="Belum ada data tren penjualan pada periode ini" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={trendColor} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={trendColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis dataKey="tanggal" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} width={56} />
+                <Tooltip
+                  content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />}
+                  cursor={{ stroke: gridColor, strokeWidth: 1 }}
+                />
+                <Area type="monotone" dataKey="penjualan" name="Penjualan" stroke={trendColor} strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* CHART 2: TOP 10 BEST SELLING PRODUCTS (BAR) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider mb-4">Top 10 Produk Terlaris (Revenue)</h3>
-          <div className="h-72 w-full">
-            {isProductsLoading ? (
-              <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">Memuat produk terlaris...</div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts || []} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis type="number" stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(val) => `${val/1000000}jt`} />
-                  <YAxis dataKey="nama" type="category" stroke="var(--color-muted-foreground)" fontSize={9} width={90} />
-                  <Tooltip formatter={(value) => [formatRupiah(Number(value)), 'Total Pendapatan']} />
-                  <Bar dataKey="totalSales" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
-                    {(topProducts || []).map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </div>
+        <ChartCard title="Top 10 Produk Terlaris (Revenue)">
+          {isProductsLoading ? (
+            <ChartLoadingState message="Memuat produk terlaris..." />
+          ) : !topProducts || topProducts.length === 0 ? (
+            <ChartEmptyState icon={PackageSearch} message="Belum ada data penjualan produk pada periode ini" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topProducts} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
+                <XAxis type="number" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} />
+                <YAxis dataKey="nama" type="category" stroke={axisColor} fontSize={9} tickLine={false} axisLine={false} width={92} />
+                <Tooltip
+                  content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />}
+                  cursor={{ fill: gridColor, opacity: 0.3 }}
+                />
+                <Bar dataKey="totalSales" name="Total Pendapatan" fill={categoricalColor(0, isDark)} radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* CHART 3: CATEGORY SALES SHARES (PIE / DONUT) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm relative">
-          <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider mb-4">Distribusi Kontribusi Kategori</h3>
-          <div className="h-72 w-full flex items-center justify-center">
-            {categories && categories.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categories}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={65}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    dataKey="value"
-                    nameKey="category"
-                    label={({ name, percent }) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
-                  >
-                    {categories.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(val) => formatRupiah(Number(val))} />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" fontSize={10} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-xs text-muted-foreground">Tidak ada rincian kategori pada periode terpilih</p>
-            )}
-          </div>
-        </div>
+        <ChartCard title="Distribusi Kontribusi Kategori">
+          {isCategoriesLoading ? (
+            <ChartLoadingState message="Memuat distribusi kategori..." />
+          ) : !categories || categories.length === 0 ? (
+            <ChartEmptyState icon={PieChartIcon} message="Tidak ada rincian kategori pada periode terpilih" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <Pie
+                  data={categories}
+                  cx="50%"
+                  cy="45%"
+                  innerRadius={62}
+                  outerRadius={88}
+                  paddingAngle={2}
+                  dataKey="value"
+                  nameKey="category"
+                  stroke="var(--color-card)"
+                  strokeWidth={2}
+                >
+                  {categories.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={categoricalColor(index, isDark)} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />} />
+                <Legend
+                  verticalAlign="bottom"
+                  height={48}
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 11, fontWeight: 600 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* CHART 4: GEOGRAPHICAL SELLAR RANKING (BAR) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider mb-4">Sebaran Wilayah Pengiriman (Revenue)</h3>
-          <div className="h-72 w-full">
-            {geoSales && geoSales.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={geoSales || []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="region" stroke="var(--color-muted-foreground)" fontSize={10} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(val) => `${val/1000000}M`} />
-                  <Tooltip formatter={(val) => formatRupiah(Number(val))} />
-                  <Bar dataKey="sales" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-xs text-muted-foreground flex items-center justify-center h-full">Belum ada sebaran wilayah penjualan</p>
-            )}
-          </div>
-        </div>
+        <ChartCard title="Sebaran Wilayah Pengiriman (Revenue)">
+          {isGeoLoading ? (
+            <ChartLoadingState message="Memuat sebaran wilayah..." />
+          ) : !geoSales || geoSales.length === 0 ? (
+            <ChartEmptyState icon={MapPin} message="Belum ada sebaran wilayah penjualan" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={geoSales} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis dataKey="region" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} width={56} />
+                <Tooltip
+                  content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />}
+                  cursor={{ fill: gridColor, opacity: 0.3 }}
+                />
+                <Bar dataKey="sales" name="Penjualan" fill={geoColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* CHART 5: SALESPERSON ATTRIBUTION (BAR) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm">
-          <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider mb-4">Performa Marketing Leaderboard</h3>
-          <div className="h-72 w-full">
-            {salesperson && salesperson.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={salesperson || []} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis type="number" stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(val) => `${val/1000000}jt`} />
-                  <YAxis dataKey="name" type="category" stroke="var(--color-muted-foreground)" fontSize={10} width={80} />
-                  <Tooltip formatter={(val) => formatRupiah(Number(val))} />
-                  <Bar dataKey="sales" fill="#ec4899" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-xs text-muted-foreground flex items-center justify-center h-full">Belum ada aktivitas marketing sales</p>
-            )}
-          </div>
-        </div>
+        <ChartCard title="Performa Marketing Leaderboard">
+          {isSalespersonLoading ? (
+            <ChartLoadingState message="Memuat performa marketing..." />
+          ) : !salesperson || salesperson.length === 0 ? (
+            <ChartEmptyState icon={Users2} message="Belum ada aktivitas marketing sales" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={salesperson} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} horizontal={false} />
+                <XAxis type="number" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} />
+                <YAxis dataKey="name" type="category" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} width={82} />
+                <Tooltip
+                  content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />}
+                  cursor={{ fill: gridColor, opacity: 0.3 }}
+                />
+                <Bar dataKey="sales" name="Penjualan" fill={salespersonColor} radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
         {/* CHART 6: FORECASTING AND 3-PERIOD MOVING AVERAGE (LINE) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Peramalan Tren Penjualan</h3>
-            <span className="text-[10px] text-indigo-500 font-bold bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20">3-Period Moving Average</span>
-          </div>
-          <div className="h-72 w-full">
-            {forecastData ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={combinedForecastChartData()}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="name" stroke="var(--color-muted-foreground)" fontSize={10} />
-                  <YAxis stroke="var(--color-muted-foreground)" fontSize={10} tickFormatter={(val) => `${val/1000000}M`} />
-                  <Tooltip formatter={(val) => formatRupiah(Number(val))} />
-                  <Line type="monotone" dataKey="Historis" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  <Line type="monotone" dataKey="RataRataBergerak" stroke="#10b981" strokeWidth={2} strokeDasharray="4 4" dot={false} />
-                  <Line type="monotone" dataKey="Prediksi" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  <Legend verticalAlign="bottom" height={36} iconType="line" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">Menghitung model perkiraan...</div>
-            )}
-          </div>
-        </div>
+        <ChartCard
+          title="Peramalan Tren Penjualan"
+          badge={
+            <span className="text-[10px] text-indigo-500 font-bold bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20 whitespace-nowrap">
+              3-Period Moving Average
+            </span>
+          }
+        >
+          {isForecastLoading ? (
+            <ChartLoadingState message="Menghitung model perkiraan..." />
+          ) : !forecastData ? (
+            <ChartEmptyState icon={LineChartIcon} message="Data historis belum mencukupi untuk peramalan" />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={combinedForecastChartData()} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                <XAxis dataKey="name" stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke={axisColor} fontSize={10} tickLine={false} axisLine={false} tickFormatter={formatCompactRupiah} width={56} />
+                <Tooltip content={<ChartTooltip formatter={(v) => formatRupiah(Number(v))} />} />
+                <Line type="monotone" dataKey="Historis" stroke={historisColor} strokeWidth={2.5} dot={{ r: 3.5 }} activeDot={{ r: 6 }} connectNulls />
+                <Line type="monotone" dataKey="RataRataBergerak" stroke={movingAvgColor} strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls />
+                <Line type="monotone" dataKey="Prediksi" stroke={prediksiColor} strokeWidth={2.5} dot={{ r: 3.5 }} activeDot={{ r: 6 }} connectNulls />
+                <Legend verticalAlign="bottom" height={36} iconType="line" wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </ChartCard>
 
       </div>
 
@@ -367,7 +372,7 @@ export default function LaporanPage() {
         <div className="flex justify-between items-center mb-5">
           <div>
             <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Segmentasi Pelanggan (Analisis RFM)</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Klasifikasi pelanggan menggunakan Recency (Kekinian), Frequency (Kerapuhan), dan Monetary (Moneter)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Klasifikasi pelanggan menggunakan Recency (Kekinian), Frequency (Frekuensi), dan Monetary (Moneter)</p>
           </div>
         </div>
 
