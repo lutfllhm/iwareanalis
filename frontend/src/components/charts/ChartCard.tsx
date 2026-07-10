@@ -13,7 +13,7 @@ interface ChartCardProps {
 
 export function ChartCard({ title, subtitle, badge, children, height = 'h-72' }: ChartCardProps) {
   return (
-    <div className="bg-card border border-border/60 hover:border-border rounded-2xl p-5 shadow-sm transition-colors duration-300">
+    <div className="card-elevated bg-card border border-border/60 hover:border-border rounded-2xl p-5 transition-colors duration-300">
       <div className="flex justify-between items-start mb-4 gap-3">
         <div>
           <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">{title}</h3>

@@ -368,7 +368,7 @@ export default function LaporanPage() {
       </div>
 
       {/* 2. CUSTOMER RFM SEGMENTATION TABLE */}
-      <div className="bg-card border border-border/60 rounded-2xl p-6 shadow-sm">
+      <div className="card-elevated bg-card border border-border/60 rounded-2xl p-6">
         <div className="flex justify-between items-center mb-5">
           <div>
             <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Segmentasi Pelanggan (Analisis RFM)</h3>

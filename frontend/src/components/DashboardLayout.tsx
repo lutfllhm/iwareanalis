@@ -76,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen bg-background overflow-hidden">
       {/* 1. DESKTOP SIDEBAR */}
       <aside
-        className={`hidden md:flex flex-col bg-card border-r border-border transition-all duration-300 ${
+        className={`hidden md:flex flex-col bg-card border-r border-border transition-all duration-300 dark:shadow-[4px_0_24px_-4px_rgba(0,0,0,0.4)] ${
           isCollapsed ? 'w-20' : 'w-64'
         }`}
       >
@@ -191,7 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* 3. MAIN CONTENT WRAPPER */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Navbar */}
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 z-30">
+        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 z-30 dark:shadow-[0_4px_24px_-4px_rgba(0,0,0,0.4)]">
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setIsMobileOpen(true)}

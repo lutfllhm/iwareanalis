@@ -56,10 +56,10 @@ function KPICard({ title, value, growth, icon: Icon, color, isCurrency, isPercen
   const isGrowthPositive = growth !== undefined && growth >= 0;
 
   return (
-    <div className="bg-card border border-border/60 hover:border-border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+    <div className="card-elevated bg-card border border-border/60 hover:border-border rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
       {/* Background soft glow on hover */}
-      <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-5 group-hover:scale-150 transition-transform duration-500 bg-${color}`} />
-      
+      <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-5 dark:opacity-10 group-hover:scale-150 transition-transform duration-500 bg-${color}`} />
+
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
         <div className={`p-2.5 rounded-xl bg-secondary text-foreground`}>
@@ -68,7 +68,7 @@ function KPICard({ title, value, growth, icon: Icon, color, isCurrency, isPercen
       </div>
 
       <div className="mt-4">
-        <h3 className="text-2xl font-black text-foreground tracking-tight">
+        <h3 className="glow-text text-2xl font-black text-foreground tracking-tight">
           {formatVal(value)}
         </h3>
         {growth !== undefined && (
@@ -211,7 +211,7 @@ export default function DashboardPage() {
 
       {/* Secondary Metrics Card grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-primary">
             <Users size={22} />
           </div>
@@ -223,7 +223,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-indigo-500">
             <Layers size={22} />
           </div>
@@ -235,7 +235,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-rose-500">
             <Undo2 size={22} />
           </div>
@@ -304,7 +304,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Dashboard Action Cards */}
-      <div className="bg-card border border-border/60 rounded-2xl p-6">
+      <div className="card-elevated bg-card border border-border/60 rounded-2xl p-6">
         <h3 className="text-base font-bold text-foreground mb-4">Informasi Operasional Dashboard</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">

@@ -37,36 +37,38 @@
   }
 
   .dark {
-    --background: 222 47% 6%;       /* Rich dark navy/slate background */
+    --background: 224 51% 4%;       /* Deeper navy/black background for stronger elevation */
     --foreground: 210 40% 98%;       /* Bright white-blue text */
-    
-    --card: 222 47% 9%;             /* Elevated dark cards */
+
+    --card: 222 44% 10%;            /* Elevated dark cards, clearly lifted off background */
     --card-foreground: 210 40% 98%;
-    
-    --popover: 222 47% 8%;
+
+    --popover: 222 44% 9%;
     --popover-foreground: 210 40% 98%;
-    
+
     --primary: 217.2 91.2% 59.8%;   /* Lighter brilliant blue for dark mode contrast */
     --primary-foreground: 222.2 47.4% 11.2%;
-    
+
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
-    
+
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
-    
+
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
     --success: 142.1 70.2% 29.2%;
     --success-foreground: 144.9 80.4% 10%;
-    
-    --border: 217.2 32.6% 17.5%;
+
+    --border: 217.2 28% 20%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    --glow-primary: 217.2 91.2% 59.8%;
   }
 }
 
@@ -103,6 +105,22 @@ body {
   color: var(--color-foreground);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Elevated card shadow: subtle in light mode, deep + soft in dark mode
+   so cards read as "lifted" off the darker background rather than
+   just a lighter rectangle with a border. */
+.card-elevated {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.dark .card-elevated {
+  box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+/* Soft glow for hero/KPI figures in dark mode only — keeps light mode
+   perfectly flat/legible and adds a premium accent where it matters most. */
+.dark .glow-text {
+  text-shadow: 0 0 18px hsl(var(--glow-primary) / 0.35);
 }
 
 /* Custom Scrollbar for modern feel */
