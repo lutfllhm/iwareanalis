@@ -6,6 +6,17 @@ import { config } from '../config';
 import logger from './logger';
 import { SyncStatus } from '@prisma/client';
 
+// Accurate Online API mengembalikan tanggal sebagai string "DD/MM/YYYY".
+// `new Date(str)` men-treat string bergaya slash sebagai MM/DD/YYYY (US),
+// sehingga hari & bulan tertukar. Parse manual berdasar format Accurate.
+function parseAccurateDate(value: string | undefined | null): Date {
+  if (!value) return new Date(NaN);
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  if (!match) return new Date(value);
+  const [, day, month, year] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
 export class AccurateService {
 
   /**
@@ -421,7 +432,7 @@ export class AccurateService {
         update: {
           id_pelanggan: customerNo,
           id_karyawan_penjual_utama: salesId,
-          tanggal: new Date(inv.transDate),
+          tanggal: parseAccurateDate(inv.transDate),
           total: inv.totalAmount || 0,
           pembayaran: inv.paymentAmount || 0,
           synced_at: new Date(),
@@ -430,7 +441,7 @@ export class AccurateService {
           nomor: inv.number,
           id_pelanggan: customerNo,
           id_karyawan_penjual_utama: salesId,
-          tanggal: new Date(inv.transDate),
+          tanggal: parseAccurateDate(inv.transDate),
           total: inv.totalAmount || 0,
           pembayaran: inv.paymentAmount || 0,
           synced_at: new Date(),
@@ -472,7 +483,7 @@ export class AccurateService {
               harga: line.unitPrice || 0,
               total_harga: (line.quantity || 0) * (line.unitPrice || 0),
               penjualan: (line.quantity || 0) * (line.unitPrice || 0),
-              tanggal: new Date(inv.transDate),
+              tanggal: parseAccurateDate(inv.transDate),
               nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
               nama_tenaga_penjual: salesName,
               id_karyawan_tenaga_penjual: salesId,
@@ -514,7 +525,7 @@ export class AccurateService {
             data: {
               kode_barang: row.itemNo || item.kode_barang,
               serial_number: row.serialNumber || '',
-              tanggal: new Date(row.date || row.transDate),
+              tanggal: parseAccurateDate(row.date || row.transDate),
               tipe_mutasi: row.transType || 'UNKNOWN',
               jumlah: row.quantity || 0,
               nama_gudang: row.warehouseName || null,
@@ -613,7 +624,7 @@ export class AccurateService {
       await prisma.workOrder.upsert({
         where: { nomor_wo: wo.number },
         update: {
-          tanggal: new Date(wo.transDate),
+          tanggal: parseAccurateDate(wo.transDate),
           kode_barang_hasil: wo.item?.no || null,
           nama_barang_hasil: wo.item?.name || null,
           kuantitas_target: wo.targetQuantity || 0,
@@ -624,7 +635,7 @@ export class AccurateService {
         },
         create: {
           nomor_wo: wo.number,
-          tanggal: new Date(wo.transDate),
+          tanggal: parseAccurateDate(wo.transDate),
           kode_barang_hasil: wo.item?.no || null,
           nama_barang_hasil: wo.item?.name || null,
           kuantitas_target: wo.targetQuantity || 0,
@@ -680,7 +691,7 @@ export class AccurateService {
         update: {
           id_pelanggan: customerNo,
           id_karyawan_penjual_utama: salesId,
-          tanggal: new Date(ret.transDate),
+          tanggal: parseAccurateDate(ret.transDate),
           total: ret.totalAmount || 0,
           pembayaran_faktur_penjualan: ret.totalAmount || 0,
           nilai_retur_faktur: ret.totalAmount || 0,
@@ -690,7 +701,7 @@ export class AccurateService {
           nomor: ret.number,
           id_pelanggan: customerNo,
           id_karyawan_penjual_utama: salesId,
-          tanggal: new Date(ret.transDate),
+          tanggal: parseAccurateDate(ret.transDate),
           total: ret.totalAmount || 0,
           pembayaran_faktur_penjualan: ret.totalAmount || 0,
           nilai_retur_faktur: ret.totalAmount || 0,
@@ -763,7 +774,7 @@ export class AccurateService {
             harga: hargaSatuan,
             total_harga: line.amount || (kuantitas * hargaSatuan),
             penjualan: line.amount || (kuantitas * hargaSatuan),
-            tanggal: new Date(inv.transDate),
+            tanggal: parseAccurateDate(inv.transDate),
             nama_pelanggan: inv.customer?.name || 'Umum',
             nama_tenaga_penjual: inv.salesman?.name || 'General',
             id_karyawan_tenaga_penjual: inv.salesman?.salesNo || 'SALES-UNKNOWN',
