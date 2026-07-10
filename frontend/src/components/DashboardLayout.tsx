@@ -19,12 +19,13 @@ import {
   Moon,
   User as UserIcon,
   UserCheck,
+  type LucideIcon,
 } from 'lucide-react';
 
 interface SidebarItem {
   name: string;
   href: string;
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   roles?: ('admin' | 'analyst' | 'viewer')[];
 }
 

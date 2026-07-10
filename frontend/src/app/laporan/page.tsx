@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import ChartTooltip from '@/components/charts/ChartTooltip';
 import { ChartCard, ChartLoadingState, ChartEmptyState } from '@/components/charts/ChartCard';
 import { useTheme } from '@/components/ThemeProvider';
+import { useMounted } from '@/hooks/useMounted';
 import api from '@/lib/api';
 import { categoricalColor, formatRupiah, formatCompactRupiah } from '@/lib/chart-theme';
 import {
@@ -14,8 +15,29 @@ import {
 } from 'recharts';
 import { Calendar, Printer, TrendingUp, PackageSearch, PieChart as PieChartIcon, MapPin, Users2, LineChart as LineChartIcon } from 'lucide-react';
 
+interface ForecastPoint {
+  yearMonth: string;
+  totalSales?: number;
+  movingAverage?: number;
+  forecastSales?: number;
+}
+
+interface CategoryRatio {
+  category: string;
+  value: number;
+}
+
+interface RfmRow {
+  id: string | number;
+  nama: string;
+  recencyDays: number;
+  frequency: number;
+  monetary: number;
+  segment: string;
+}
+
 export default function LaporanPage() {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -26,10 +48,6 @@ export default function LaporanPage() {
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Fetch Sales Trend
   const { data: trendData, isLoading: isTrendLoading } = useQuery({
@@ -101,14 +119,14 @@ export default function LaporanPage() {
   // Compile full forecasting chart dataset
   const combinedForecastChartData = () => {
     if (!forecastData) return [];
-    const hist = (forecastData.historical || []).map((h: any) => ({
+    const hist = (forecastData.historical || []).map((h: ForecastPoint) => ({
       name: h.yearMonth,
       Historis: h.totalSales,
       RataRataBergerak: h.movingAverage,
       Prediksi: null
     }));
 
-    const fore = (forecastData.forecast || []).map((f: any) => ({
+    const fore = (forecastData.forecast || []).map((f: ForecastPoint) => ({
       name: f.yearMonth,
       Historis: null,
       RataRataBergerak: null,
@@ -275,7 +293,7 @@ export default function LaporanPage() {
                   stroke="var(--color-card)"
                   strokeWidth={2}
                 >
-                  {categories.map((entry: any, index: number) => (
+                  {categories.map((entry: CategoryRatio, index: number) => (
                     <Cell key={`cell-${index}`} fill={categoricalColor(index, isDark)} />
                   ))}
                 </Pie>
@@ -390,7 +408,7 @@ export default function LaporanPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {rfmData && rfmData.length > 0 ? (
-                rfmData.slice(0, 10).map((row: any) => (
+                rfmData.slice(0, 10).map((row: RfmRow) => (
                   <tr key={row.id} className="hover:bg-muted/10 transition-colors">
                     <td className="p-3 font-bold text-foreground">{row.id}</td>
                     <td className="p-3 text-foreground">{row.nama}</td>

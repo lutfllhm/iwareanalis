@@ -4,7 +4,28 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
-import { Settings, Shield, User, RefreshCw, CheckCircle, XCircle, Key, QrCode, Download, ToggleLeft, ToggleRight, Database } from 'lucide-react';
+import { Settings, Shield, RefreshCw, CheckCircle, XCircle, Download, Database } from 'lucide-react';
+import type { AxiosError } from 'axios';
+
+interface SettingsData {
+  ACCURATE_APP_KEY?: string;
+  ACCURATE_SIGNATURE_SECRET?: string;
+  ACCURATE_API_TOKEN?: string;
+  SYNC_INTERVAL_CRON?: string;
+  ACCURATE_DB_NAME?: string;
+}
+
+interface UserProfile {
+  id: number;
+  role: 'admin' | 'analyst' | 'viewer';
+  two_fa_enabled?: boolean;
+}
+
+interface DownloadConfig {
+  enabledModules?: string[];
+}
+
+type ApiError = AxiosError<{ message?: string }>;
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -46,7 +67,7 @@ export default function SettingsPage() {
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => {
-      const res = await api.get('/settings');
+      const res = await api.get<SettingsData>('/settings');
       return res.data;
     },
   });
@@ -55,7 +76,7 @@ export default function SettingsPage() {
   const { data: userProfile } = useQuery({
     queryKey: ['userProfile'],
     queryFn: async () => {
-      const res = await api.get('/auth/me');
+      const res = await api.get<UserProfile>('/auth/me');
       return res.data;
     },
   });
@@ -64,12 +85,16 @@ export default function SettingsPage() {
   const { data: downloadConfigData, refetch: refetchDownloadConfig } = useQuery({
     queryKey: ['downloadConfig'],
     queryFn: async () => {
-      const res = await api.get('/settings/download-config');
+      const res = await api.get<DownloadConfig>('/settings/download-config');
       return res.data;
     },
   });
 
-  // Load fetched settings values into react state variables
+  // Load fetched settings values into react state variables.
+  // These fields are user-editable after load, so they can't be derived
+  // directly from the query data on every render — a one-time sync on
+  // arrival is the correct pattern here.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (settingsData) {
       setAppKey(settingsData.ACCURATE_APP_KEY || '');
@@ -85,10 +110,11 @@ export default function SettingsPage() {
       setEnabledModules(downloadConfigData.enabledModules || []);
     }
   }, [settingsData, userProfile, downloadConfigData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Mutation to update general settings
   const updateSettingsMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: Partial<SettingsData>) => {
       const res = await api.post('/settings/update', payload);
       return res.data;
     },
@@ -97,7 +123,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal memperbarui pengaturan' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -119,7 +145,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menghubungkan ke Accurate' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -137,7 +163,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       setTimeout(() => setToast(null), 4000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal terhubung ke Accurate' });
       setTimeout(() => setToast(null), 6000);
     },
@@ -163,7 +189,7 @@ export default function SettingsPage() {
       setConfirmPassword('');
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       setToast({ type: 'error', msg: err.message || 'Gagal memperbarui password' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -179,7 +205,7 @@ export default function SettingsPage() {
       setQrCodeUrl(data.qrCodeUrl);
       setShow2FaSetup(true);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal memicu setup 2FA' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -200,7 +226,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Verifikasi kode OTP gagal' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -218,7 +244,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menonaktifkan 2FA' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -235,7 +261,7 @@ export default function SettingsPage() {
       refetchDownloadConfig();
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menyimpan konfigurasi download' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -635,6 +661,7 @@ export default function SettingsPage() {
               {show2FaSetup && qrCodeUrl && (
                 <div className="p-4 rounded-xl border border-border bg-muted/20 flex flex-col md:flex-row items-center md:items-start gap-6 animate-fade-in">
                   <div className="bg-white p-3 rounded-xl border border-border flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- qrCodeUrl is a generated data: URI, not a static asset next/image can optimize */}
                     <img src={qrCodeUrl} alt="2FA QR Code" className="w-40 h-40" />
                   </div>
                   <div className="space-y-4 flex-1">

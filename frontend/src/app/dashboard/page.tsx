@@ -25,14 +25,15 @@ import {
   Calendar,
   AlertCircle,
   PackageSearch,
-  ArrowRight
+  ArrowRight,
+  type LucideIcon,
 } from 'lucide-react';
 
 interface KPICardProps {
   title: string;
   value: string | number;
   growth?: number;
-  icon: React.ComponentType<any>;
+  icon: LucideIcon;
   color: string;
   isCurrency?: boolean;
   isPercentage?: boolean;
