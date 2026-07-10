@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/ThemeProvider';
@@ -155,17 +156,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className={`h-16 flex items-center border-b border-border/70 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-5'}`}>
           {!isCollapsed && (
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="shrink-0 h-8 w-8 rounded-lg bg-linear-to-br from-primary to-fuchsia-500 flex items-center justify-center shadow-md shadow-primary/25">
-                <Sparkles size={16} className="text-white" />
+              <div className="shrink-0 h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
+                <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
               </div>
               <span className="font-extrabold text-[15px] text-foreground tracking-tight truncate">
-                AIware Sales
+                Alware Sales
               </span>
             </div>
           )}
           {isCollapsed && (
-            <div className="h-8 w-8 rounded-lg bg-linear-to-br from-primary to-fuchsia-500 flex items-center justify-center shadow-md shadow-primary/25">
-              <Sparkles size={16} className="text-white" />
+            <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
+              <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
             </div>
           )}
           {!isCollapsed && (
@@ -235,10 +236,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <div className="h-16 flex items-center justify-between px-5 border-b border-border/70">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-linear-to-br from-primary to-fuchsia-500 flex items-center justify-center shadow-md shadow-primary/25">
-              <Sparkles size={16} className="text-white" />
+            <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
+              <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
             </div>
-            <span className="font-extrabold text-[15px] text-foreground tracking-tight">AIware Sales</span>
+            <span className="font-extrabold text-[15px] text-foreground tracking-tight">Alware Sales</span>
           </div>
           <button
             onClick={() => setIsMobileOpen(false)}

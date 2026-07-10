@@ -80,6 +80,7 @@ coverage/
 !accurate/*.png
 !frontend/public/*.svg
 !frontend/public/*.png
+!frontend/src/app/icon.png
 
 # Generated Files
 *.generated.*

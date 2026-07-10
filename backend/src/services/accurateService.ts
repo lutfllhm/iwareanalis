@@ -17,6 +17,62 @@ function parseAccurateDate(value: string | undefined | null): Date {
   return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
+function formatAccurateDate(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// Berapa lama ke belakang histori transaksi ditarik saat sync (default 2 tahun),
+// supaya tidak hanya mengandalkan batch/halaman default yang dikembalikan Accurate.
+const SYNC_HISTORY_YEARS = 2;
+
+function getSyncDateRange(): { startDate: string; endDate: string } {
+  const end = new Date();
+  const start = new Date();
+  start.setFullYear(start.getFullYear() - SYNC_HISTORY_YEARS);
+  return { startDate: formatAccurateDate(start), endDate: formatAccurateDate(end) };
+}
+
+/**
+ * Tarik semua halaman dari endpoint Accurate `list.do` yang mendukung
+ * paginasi (`sp.pageCount`), memanggil `onPage` untuk tiap baris yang didapat.
+ * Tanpa ini, sync hanya membaca halaman pertama (default ~100-200 baris
+ * terbaru) dan diam-diam kehilangan seluruh histori yang lebih lama.
+ */
+async function fetchAllAccuratePages(
+  url: string,
+  headers: Record<string, string>,
+  baseParams: Record<string, string>,
+  onPage: (rows: any[]) => Promise<void>
+): Promise<number> {
+  let page = 1;
+  let totalRows = 0;
+
+  while (true) {
+    const response = await axios.post(
+      url,
+      new URLSearchParams({ ...baseParams, page: String(page), pageSize: '100' }).toString(),
+      {
+        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+        maxRedirects: 5,
+      }
+    );
+
+    if (!response.data || !response.data.d) {
+      throw new Error(response.data?.message || 'No data returned from Accurate');
+    }
+
+    const rows: any[] = response.data.d;
+    await onPage(rows);
+    totalRows += rows.length;
+
+    const pageCount = response.data.sp?.pageCount || 1;
+    if (page >= pageCount || rows.length === 0) break;
+    page++;
+  }
+
+  return totalRows;
+}
+
 export class AccurateService {
 
   /**
@@ -392,108 +448,106 @@ export class AccurateService {
 
   private static async pullFakturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/sales-invoice/list.do
-    const response = await axios.post(
-      `${host}/accurate/api/sales-invoice/list.do`,
-      new URLSearchParams({
-        fields: 'number,transDate,customer,totalAmount,paymentAmount,salesman,detailList',
-      }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
-      }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data.message || 'No invoice data returned');
-    }
-
-    const invoices = response.data.d;
+    // Tanpa startDate/endDate & paginasi, Accurate hanya mengembalikan satu
+    // halaman data terbaru (±100-200 baris) dan histori lama diam-diam hilang.
+    const { startDate, endDate } = getSyncDateRange();
     let count = 0;
 
-    for (const inv of invoices) {
-      const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
-      const salesId = inv.salesman?.salesNo || 'SALES-UNKNOWN';
-      const salesName = inv.salesman?.name || 'General Sales';
+    await fetchAllAccuratePages(
+      `${host}/accurate/api/sales-invoice/list.do`,
+      headers,
+      {
+        fields: 'number,transDate,customer,totalAmount,paymentAmount,salesman,detailList',
+        startDate,
+        endDate,
+      },
+      async (invoices) => {
+        for (const inv of invoices) {
+          const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
+          const salesId = inv.salesman?.salesNo || 'SALES-UNKNOWN';
+          const salesName = inv.salesman?.name || 'General Sales';
 
-      // 1. Ensure customer exists to satisfy foreign key constraints
-      await prisma.pelanggan.upsert({
-        where: { id_pelanggan: customerNo },
-        update: {},
-        create: {
-          id_pelanggan: customerNo,
-          nama: inv.customer?.name || 'Pelanggan Baru',
-          synced_at: new Date(),
-        },
-      });
-
-      // 2. Create/Update Invoice
-      await prisma.fakturPenjualan.upsert({
-        where: { nomor: inv.number },
-        update: {
-          id_pelanggan: customerNo,
-          id_karyawan_penjual_utama: salesId,
-          tanggal: parseAccurateDate(inv.transDate),
-          total: inv.totalAmount || 0,
-          pembayaran: inv.paymentAmount || 0,
-          synced_at: new Date(),
-        },
-        create: {
-          nomor: inv.number,
-          id_pelanggan: customerNo,
-          id_karyawan_penjual_utama: salesId,
-          tanggal: parseAccurateDate(inv.transDate),
-          total: inv.totalAmount || 0,
-          pembayaran: inv.paymentAmount || 0,
-          synced_at: new Date(),
-        },
-      });
-
-      // Delete existing invoice details first before overwriting, to prevent duplicate entries
-      await prisma.rincianPenjualanBarang.deleteMany({
-        where: { nomor: inv.number },
-      });
-
-      // 3. Process Invoice Details list (detailList)
-      if (inv.detailList && Array.isArray(inv.detailList)) {
-        for (const line of inv.detailList) {
-          const itemNo = line.item?.no || 'BRG-UNKNOWN';
-          const itemName = line.item?.name || 'Barang Hilang';
-
-          // Ensure item master exists for FK constraint
-          await prisma.barangJasa.upsert({
-            where: { kode_barang: itemNo },
+          // 1. Ensure customer exists to satisfy foreign key constraints
+          await prisma.pelanggan.upsert({
+            where: { id_pelanggan: customerNo },
             update: {},
             create: {
-              kode_barang: itemNo,
-              nama_barang: itemName,
-              kategori_barang: 'Umum',
-              tgl_jam_pembuatan: new Date(),
-              kts_gdng_pengguna: 0,
-              kts_semua_gdng: 0,
+              id_pelanggan: customerNo,
+              nama: inv.customer?.name || 'Pelanggan Baru',
               synced_at: new Date(),
             },
           });
 
-          await prisma.rincianPenjualanBarang.create({
-            data: {
-              nomor: inv.number,
-              kode: itemNo,
-              nama_barang: itemName,
-              kuantitas: line.quantity || 0,
-              harga: line.unitPrice || 0,
-              total_harga: (line.quantity || 0) * (line.unitPrice || 0),
-              penjualan: (line.quantity || 0) * (line.unitPrice || 0),
+          // 2. Create/Update Invoice
+          await prisma.fakturPenjualan.upsert({
+            where: { nomor: inv.number },
+            update: {
+              id_pelanggan: customerNo,
+              id_karyawan_penjual_utama: salesId,
               tanggal: parseAccurateDate(inv.transDate),
-              nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
-              nama_tenaga_penjual: salesName,
-              id_karyawan_tenaga_penjual: salesId,
+              total: inv.totalAmount || 0,
+              pembayaran: inv.paymentAmount || 0,
+              synced_at: new Date(),
+            },
+            create: {
+              nomor: inv.number,
+              id_pelanggan: customerNo,
+              id_karyawan_penjual_utama: salesId,
+              tanggal: parseAccurateDate(inv.transDate),
+              total: inv.totalAmount || 0,
+              pembayaran: inv.paymentAmount || 0,
               synced_at: new Date(),
             },
           });
+
+          // Delete existing invoice details first before overwriting, to prevent duplicate entries
+          await prisma.rincianPenjualanBarang.deleteMany({
+            where: { nomor: inv.number },
+          });
+
+          // 3. Process Invoice Details list (detailList)
+          if (inv.detailList && Array.isArray(inv.detailList)) {
+            for (const line of inv.detailList) {
+              const itemNo = line.item?.no || 'BRG-UNKNOWN';
+              const itemName = line.item?.name || 'Barang Hilang';
+
+              // Ensure item master exists for FK constraint
+              await prisma.barangJasa.upsert({
+                where: { kode_barang: itemNo },
+                update: {},
+                create: {
+                  kode_barang: itemNo,
+                  nama_barang: itemName,
+                  kategori_barang: 'Umum',
+                  tgl_jam_pembuatan: new Date(),
+                  kts_gdng_pengguna: 0,
+                  kts_semua_gdng: 0,
+                  synced_at: new Date(),
+                },
+              });
+
+              await prisma.rincianPenjualanBarang.create({
+                data: {
+                  nomor: inv.number,
+                  kode: itemNo,
+                  nama_barang: itemName,
+                  kuantitas: line.quantity || 0,
+                  harga: line.unitPrice || 0,
+                  total_harga: (line.quantity || 0) * (line.unitPrice || 0),
+                  penjualan: (line.quantity || 0) * (line.unitPrice || 0),
+                  tanggal: parseAccurateDate(inv.transDate),
+                  nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
+                  nama_tenaga_penjual: salesName,
+                  id_karyawan_tenaga_penjual: salesId,
+                  synced_at: new Date(),
+                },
+              });
+            }
+          }
+          count++;
         }
       }
-      count++;
-    }
+    );
 
     return count;
   }
@@ -653,63 +707,59 @@ export class AccurateService {
 
   private static async pullReturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/sales-return/list.do
-    const response = await axios.post(
-      `${host}/accurate/api/sales-return/list.do`,
-      new URLSearchParams({
-        fields: 'number,transDate,customer,totalAmount,salesman',
-      }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
-      }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data.message || 'No return data returned');
-    }
-
-    const returns = response.data.d;
+    const { startDate, endDate } = getSyncDateRange();
     let count = 0;
 
-    for (const ret of returns) {
-      const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
-      const salesId = ret.salesman?.salesNo || 'SALES-UNKNOWN';
+    await fetchAllAccuratePages(
+      `${host}/accurate/api/sales-return/list.do`,
+      headers,
+      {
+        fields: 'number,transDate,customer,totalAmount,salesman',
+        startDate,
+        endDate,
+      },
+      async (returns) => {
+        for (const ret of returns) {
+          const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
+          const salesId = ret.salesman?.salesNo || 'SALES-UNKNOWN';
 
-      // Ensure customer exists for FK constraint
-      await prisma.pelanggan.upsert({
-        where: { id_pelanggan: customerNo },
-        update: {},
-        create: {
-          id_pelanggan: customerNo,
-          nama: ret.customer?.name || 'Pelanggan Baru',
-          synced_at: new Date(),
-        },
-      });
+          // Ensure customer exists for FK constraint
+          await prisma.pelanggan.upsert({
+            where: { id_pelanggan: customerNo },
+            update: {},
+            create: {
+              id_pelanggan: customerNo,
+              nama: ret.customer?.name || 'Pelanggan Baru',
+              synced_at: new Date(),
+            },
+          });
 
-      await prisma.returPenjualan.upsert({
-        where: { nomor: ret.number },
-        update: {
-          id_pelanggan: customerNo,
-          id_karyawan_penjual_utama: salesId,
-          tanggal: parseAccurateDate(ret.transDate),
-          total: ret.totalAmount || 0,
-          pembayaran_faktur_penjualan: ret.totalAmount || 0,
-          nilai_retur_faktur: ret.totalAmount || 0,
-          synced_at: new Date(),
-        },
-        create: {
-          nomor: ret.number,
-          id_pelanggan: customerNo,
-          id_karyawan_penjual_utama: salesId,
-          tanggal: parseAccurateDate(ret.transDate),
-          total: ret.totalAmount || 0,
-          pembayaran_faktur_penjualan: ret.totalAmount || 0,
-          nilai_retur_faktur: ret.totalAmount || 0,
-          synced_at: new Date(),
-        },
-      });
-      count++;
-    }
+          await prisma.returPenjualan.upsert({
+            where: { nomor: ret.number },
+            update: {
+              id_pelanggan: customerNo,
+              id_karyawan_penjual_utama: salesId,
+              tanggal: parseAccurateDate(ret.transDate),
+              total: ret.totalAmount || 0,
+              pembayaran_faktur_penjualan: ret.totalAmount || 0,
+              nilai_retur_faktur: ret.totalAmount || 0,
+              synced_at: new Date(),
+            },
+            create: {
+              nomor: ret.number,
+              id_pelanggan: customerNo,
+              id_karyawan_penjual_utama: salesId,
+              tanggal: parseAccurateDate(ret.transDate),
+              total: ret.totalAmount || 0,
+              pembayaran_faktur_penjualan: ret.totalAmount || 0,
+              nilai_retur_faktur: ret.totalAmount || 0,
+              synced_at: new Date(),
+            },
+          });
+          count++;
+        }
+      }
+    );
 
     return count;
   }
@@ -724,66 +774,62 @@ export class AccurateService {
    * sama seperti pendekatan pullFakturPenjualan dan reportController.ts.
    */
   private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>): Promise<number> {
-    const response = await axios.post(
-      `${host}/accurate/api/sales-invoice/list.do`,
-      new URLSearchParams({
-        fields: 'number,transDate,customer,salesman,detailList',
-      }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
-      }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data?.message || 'No sales invoice data returned');
-    }
-
-    const invoices: any[] = response.data.d;
+    const { startDate, endDate } = getSyncDateRange();
     let count = 0;
 
-    for (const inv of invoices) {
-      for (const line of (inv.detailList || [])) {
-        const itemNo = line.item?.no || 'BRG-UNKNOWN';
-        const itemName = line.item?.name || 'Barang Tidak Diketahui';
+    await fetchAllAccuratePages(
+      `${host}/accurate/api/sales-invoice/list.do`,
+      headers,
+      {
+        fields: 'number,transDate,customer,salesman,detailList',
+        startDate,
+        endDate,
+      },
+      async (invoices) => {
+        for (const inv of invoices) {
+          for (const line of (inv.detailList || [])) {
+            const itemNo = line.item?.no || 'BRG-UNKNOWN';
+            const itemName = line.item?.name || 'Barang Tidak Diketahui';
 
-        // Pastikan barang ada di master
-        await prisma.barangJasa.upsert({
-          where: { kode_barang: itemNo },
-          update: {},
-          create: {
-            kode_barang: itemNo,
-            nama_barang: itemName,
-            kategori_barang: 'Umum',
-            tgl_jam_pembuatan: new Date(),
-            kts_gdng_pengguna: 0,
-            kts_semua_gdng: 0,
-            synced_at: new Date(),
-          },
-        });
+            // Pastikan barang ada di master
+            await prisma.barangJasa.upsert({
+              where: { kode_barang: itemNo },
+              update: {},
+              create: {
+                kode_barang: itemNo,
+                nama_barang: itemName,
+                kategori_barang: 'Umum',
+                tgl_jam_pembuatan: new Date(),
+                kts_gdng_pengguna: 0,
+                kts_semua_gdng: 0,
+                synced_at: new Date(),
+              },
+            });
 
-        const kuantitas = line.quantity || 0;
-        const hargaSatuan = line.unitPrice || line.basePrice || 0;
+            const kuantitas = line.quantity || 0;
+            const hargaSatuan = line.unitPrice || line.basePrice || 0;
 
-        await prisma.rincianPenjualanBarang.create({
-          data: {
-            nomor: inv.number,
-            kode: itemNo,
-            nama_barang: itemName,
-            kuantitas,
-            harga: hargaSatuan,
-            total_harga: line.amount || (kuantitas * hargaSatuan),
-            penjualan: line.amount || (kuantitas * hargaSatuan),
-            tanggal: parseAccurateDate(inv.transDate),
-            nama_pelanggan: inv.customer?.name || 'Umum',
-            nama_tenaga_penjual: inv.salesman?.name || 'General',
-            id_karyawan_tenaga_penjual: inv.salesman?.salesNo || 'SALES-UNKNOWN',
-            synced_at: new Date(),
-          },
-        });
-        count++;
+            await prisma.rincianPenjualanBarang.create({
+              data: {
+                nomor: inv.number,
+                kode: itemNo,
+                nama_barang: itemName,
+                kuantitas,
+                harga: hargaSatuan,
+                total_harga: line.amount || (kuantitas * hargaSatuan),
+                penjualan: line.amount || (kuantitas * hargaSatuan),
+                tanggal: parseAccurateDate(inv.transDate),
+                nama_pelanggan: inv.customer?.name || 'Umum',
+                nama_tenaga_penjual: inv.salesman?.name || 'General',
+                id_karyawan_tenaga_penjual: inv.salesman?.salesNo || 'SALES-UNKNOWN',
+                synced_at: new Date(),
+              },
+            });
+            count++;
+          }
+        }
       }
-    }
+    );
 
     return count;
   }

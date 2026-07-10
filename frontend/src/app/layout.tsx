@@ -11,8 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Accurate Online Data Analyst Dashboard',
-  description: 'Dashboard analytics platform integrated with Accurate Online Open API.',
+  title: 'Alware Sales',
+  description: 'Dashboard analitik penjualan terintegrasi dengan Accurate Online.',
 };
 
 export default function RootLayout({
