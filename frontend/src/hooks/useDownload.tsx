@@ -33,18 +33,9 @@ export function useDownload(moduleKey: string, endpoint: string, filename: strin
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const token = localStorage.getItem('accessToken');
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5010/api';
-      const response = await fetch(`${baseUrl}${endpoint}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get(endpoint, { responseType: 'blob' });
 
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ message: 'Gagal mengunduh data' }));
-        throw new Error(err.message || 'Gagal mengunduh data');
-      }
-
-      const blob = await response.blob();
+      const blob = response.data;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -56,7 +47,16 @@ export function useDownload(moduleKey: string, endpoint: string, filename: strin
 
       onSuccess?.(`Download data ${filename} berhasil!`);
     } catch (err: any) {
-      const msg = err.message || 'Gagal mengunduh data';
+      let msg = err.message || 'Gagal mengunduh data';
+      const errBlob = err.response?.data;
+      if (errBlob instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await errBlob.text());
+          msg = parsed.message || msg;
+        } catch {
+          // response body wasn't JSON; keep default message
+        }
+      }
       setDownloadError(msg);
       onError?.(msg);
     } finally {
