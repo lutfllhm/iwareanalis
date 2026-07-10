@@ -103,12 +103,8 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
     const headers = await AccurateService.getApiTokenHeaders();
 
-    if (branchIds.length > 0) {
-      logger.warn('Filter cabang diminta tapi sementara dinonaktifkan (field branch belum didukung stabil oleh Accurate untuk laporan ini)');
-    }
-
     const params: Record<string, string> = {
-      fields:   'id,number,transDate,customer,salesman',
+      fields:   'id,number,transDate,customer,salesman,branch',
       pageSize: String(limit),
       page:     String(page),
     };
@@ -157,7 +153,11 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       })
     );
 
-    const invoices = detailResults;
+    let invoices = detailResults;
+
+    if (branchIds.length > 0) {
+      invoices = invoices.filter((inv) => inv.branch?.id != null && branchIds.includes(String(inv.branch.id)));
+    }
 
     for (const inv of invoices) {
       for (const line of (inv.detailList || [])) {
@@ -188,7 +188,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           kategoriBarang: line.item?.itemCategory?.name || '',
           namaCustomer:   inv.customer?.name || '',
           namaSalesman:   inv.salesman?.name || '',
-          namaCabang:     '',
+          namaCabang:     inv.branch?.name || '',
           kuantitas,
           satuan:         line.unit?.name || line.unitName || 'Unit',
           hargaSatuan,

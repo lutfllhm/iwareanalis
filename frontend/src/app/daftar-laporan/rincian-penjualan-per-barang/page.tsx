@@ -52,7 +52,7 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: 'totalHarga', label: 'Total' },
 ];
 
-const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map((c) => c.key).filter((k) => k !== 'namaCabang');
+const DEFAULT_VISIBLE_COLUMNS = ALL_COLUMNS.map((c) => c.key);
 
 const formatRupiah = (val: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -122,10 +122,18 @@ export default function RincianPenjualanPerBarangPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter cabang sementara dinonaktifkan: field "branch" belum stabil di sisi Accurate
-  // untuk laporan ini (menyebabkan response kosong). cabangList dibiarkan kosong.
-  const CABANG_FILTER_ENABLED = false;
-  const cabangList: Cabang[] = [];
+  const CABANG_FILTER_ENABLED = true;
+
+  const { data: cabangData } = useQuery({
+    queryKey: ['cabangList'],
+    queryFn: async () => {
+      const res = await api.get('/report/cabang');
+      return res.data;
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const cabangList: Cabang[] = cabangData?.data || [];
 
   const toggleCabang = (id: string) => {
     setSelectedCabang((prev) =>
@@ -143,10 +151,13 @@ export default function RincianPenjualanPerBarangPage() {
   const isColVisible = (key: string) => visibleColumns.includes(key);
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate],
+    queryKey: ['accurateRincianPenjualan', page, limit, q, startDate, endDate, selectedCabang],
     queryFn: async () => {
       const res = await api.get('/report/rincian-penjualan-per-barang', {
-        params: { page, limit, q, startDate, endDate },
+        params: {
+          page, limit, q, startDate, endDate,
+          branchIds: selectedCabang.length > 0 ? selectedCabang.join(',') : undefined,
+        },
       });
       return res.data;
     },
