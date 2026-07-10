@@ -177,6 +177,12 @@ router.get(
   reportController.getDaftarReturPenjualan as any
 );
 
+router.get(
+  '/report/daftar-barang-jasa',
+  authenticateToken as any,
+  reportController.getDaftarBarangJasa as any
+);
+
 
 // ==========================================
 // 6. USER MANAGEMENT ROUTES (Admin only)

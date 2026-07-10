@@ -8,6 +8,7 @@ import { useTheme } from '@/components/ThemeProvider';
 import {
   LayoutDashboard,
   Package,
+  Boxes,
   FileText,
   RotateCcw,
   TrendingUp,
@@ -49,6 +50,7 @@ const sidebarSections: SidebarSection[] = [
   {
     label: 'Daftar Laporan',
     items: [
+      { name: 'Daftar Barang dan Jasa', shortName: 'Barang dan Jasa', href: '/daftar-laporan/daftar-barang-jasa', icon: Boxes },
       { name: 'Rincian Penjualan per Barang', shortName: 'Rincian Penjualan', href: '/daftar-laporan/rincian-penjualan-per-barang', icon: Package },
       { name: 'Daftar Retur Penjualan', shortName: 'Retur Penjualan', href: '/daftar-laporan/penjualan/daftar-retur', icon: RotateCcw },
       { name: 'Daftar Faktur Penjualan', shortName: 'Faktur Penjualan', href: '/daftar-laporan/penjualan/daftar-faktur', icon: FileText },

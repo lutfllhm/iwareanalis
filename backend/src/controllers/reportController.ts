@@ -455,3 +455,85 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
     });
   }
 }
+
+/**
+ * GET /report/daftar-barang-jasa
+ *
+ * Live proxy langsung ke Accurate API /api/item/list.do
+ */
+export async function getDaftarBarangJasa(req: AuthenticatedRequest, res: Response) {
+  const q      = req.query.q as string || '';
+  const page   = parseInt(req.query.page  as string || '1',  10);
+  const limit  = parseInt(req.query.limit as string || '10', 10);
+
+  try {
+    const host = await AccurateService.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      return res.status(401).json({
+        message: 'Belum terhubung ke Accurate. Silakan hubungkan akun Accurate terlebih dahulu di halaman Pengaturan.',
+        code: 'NOT_CONNECTED',
+      });
+    }
+
+    const headers = await AccurateService.getApiTokenHeaders();
+
+    const params: Record<string, string> = {
+      fields:   'no,name,itemCategory,itemGroup,suspended,createdTime,quantity,totalQuantity',
+      pageSize: String(limit),
+      page:     String(page),
+    };
+    if (q) params.keywords = q;
+
+    const response = await axios.get(`${host}/accurate/api/item/list.do`, {
+      params,
+      headers,
+      maxRedirects: 5,
+    });
+
+    if (!response.data || !response.data.s) {
+      const errMsg = response.data?.d || response.data?.message || 'Response tidak valid dari Accurate';
+      logger.error('Accurate API error (daftar-barang-jasa):', errMsg);
+      return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
+    }
+
+    const items: any[] = response.data.d || [];
+    const sp = response.data.sp || {};
+
+    const rows = items.map((item) => ({
+      kodeBarang: item.no,
+      namaBarang: item.name,
+      kategoriBarang: item.itemCategory?.name || '',
+      namaMerekBarang: item.itemGroup?.name || '',
+      nonAktif: item.suspended || false,
+      tglJamPembuatan: item.createdTime || null,
+      ktsGdngPengguna: item.quantity || 0,
+      ktsSemuaGdng: item.totalQuantity || 0,
+    }));
+
+    return res.status(200).json({
+      data: rows,
+      pagination: {
+        page,
+        limit:      sp.pageSize  || limit,
+        total:      sp.rowCount  || rows.length,
+        totalPages: sp.pageCount || 1,
+      },
+      source: 'accurate',
+    });
+  } catch (error: any) {
+    const status = error.response?.status;
+    const msg    = error.response?.data?.d || error.response?.data?.message || error.message;
+
+    if (status === 401) {
+      return res.status(401).json({
+        message: `Sesi Accurate telah berakhir atau kredensial tidak valid${msg ? `: ${msg}` : ''}. Silakan hubungkan ulang di halaman Pengaturan.`,
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    logger.error('Gagal fetch daftar barang & jasa dari Accurate:', msg);
+    return res.status(502).json({
+      message: `Gagal mengambil data dari Accurate: ${msg || 'Kesalahan tidak diketahui'}`,
+    });
+  }
+}

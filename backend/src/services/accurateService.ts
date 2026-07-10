@@ -348,100 +348,87 @@ export class AccurateService {
 
   private static async pullBarangJasa(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/item/list.do
-    const response = await axios.post(
-      `${host}/accurate/api/item/list.do`,
-      new URLSearchParams({
-        fields: 'no,name,itemType,itemCategory,upToDate,suspended,quantity,totalQuantity',
-      }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
-      }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data.message || 'No item data returned');
-    }
-
-    const items = response.data.d;
     let count = 0;
 
-    for (const item of items) {
-      // Mapping field Accurate -> Database
-      await prisma.barangJasa.upsert({
-        where: { kode_barang: item.no },
-        update: {
-          nama_barang: item.name,
-          kategori_barang: item.itemCategory?.name || 'Umum',
-          non_aktif: item.suspended || false,
-          kts_gdng_pengguna: item.quantity || 0,
-          kts_semua_gdng: item.totalQuantity || 0,
-          synced_at: new Date(),
-        },
-        create: {
-          kode_barang: item.no,
-          nama_barang: item.name,
-          kategori_barang: item.itemCategory?.name || 'Umum',
-          nama_merek_barang: '',
-          non_aktif: item.suspended || false,
-          tgl_jam_pembuatan: new Date(),
-          kts_gdng_pengguna: item.quantity || 0,
-          kts_semua_gdng: item.totalQuantity || 0,
-          synced_at: new Date(),
-        },
-      });
-      count++;
-    }
+    await fetchAllAccuratePages(
+      `${host}/accurate/api/item/list.do`,
+      headers,
+      {
+        fields: 'no,name,itemType,itemCategory,itemGroup,upToDate,suspended,quantity,totalQuantity',
+      },
+      async (items) => {
+        for (const item of items) {
+          // Mapping field Accurate -> Database
+          await prisma.barangJasa.upsert({
+            where: { kode_barang: item.no },
+            update: {
+              nama_barang: item.name,
+              kategori_barang: item.itemCategory?.name || 'Umum',
+              nama_merek_barang: item.itemGroup?.name || null,
+              non_aktif: item.suspended || false,
+              kts_gdng_pengguna: item.quantity || 0,
+              kts_semua_gdng: item.totalQuantity || 0,
+              synced_at: new Date(),
+            },
+            create: {
+              kode_barang: item.no,
+              nama_barang: item.name,
+              kategori_barang: item.itemCategory?.name || 'Umum',
+              nama_merek_barang: item.itemGroup?.name || null,
+              non_aktif: item.suspended || false,
+              tgl_jam_pembuatan: new Date(),
+              kts_gdng_pengguna: item.quantity || 0,
+              kts_semua_gdng: item.totalQuantity || 0,
+              synced_at: new Date(),
+            },
+          });
+          count++;
+        }
+      }
+    );
 
     return count;
   }
 
   private static async pullPelanggan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/customer/list.do
-    const response = await axios.post(
-      `${host}/accurate/api/customer/list.do`,
-      new URLSearchParams({
-        fields: 'id,name,customerNo,customerGroup,suspended,shipZipCode,shipCity,shipProvince,shipStreet',
-      }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
-      }
-    );
-
-    if (!response.data || !response.data.d) {
-      throw new Error(response.data.message || 'No customer data returned');
-    }
-
-    const customers = response.data.d;
     let count = 0;
 
-    for (const cust of customers) {
-      await prisma.pelanggan.upsert({
-        where: { id_pelanggan: cust.customerNo },
-        update: {
-          nama: cust.name,
-          kategori_pelanggan: cust.customerGroup?.name || 'Umum',
-          non_aktif: cust.suspended || false,
-          kota_pengiriman: cust.shipCity,
-          provinsi_pengiriman: cust.shipProvince,
-          alamat_lengkap_pengiriman: cust.shipStreet,
-          synced_at: new Date(),
-        },
-        create: {
-          id_pelanggan: cust.customerNo,
-          nama: cust.name,
-          kategori_pelanggan: cust.customerGroup?.name || 'Umum',
-          non_aktif: cust.suspended || false,
-          kota_pengiriman: cust.shipCity,
-          provinsi_pengiriman: cust.shipProvince,
-          alamat_lengkap_pengiriman: cust.shipStreet,
-          tgl_jam_pembuatan: new Date(),
-          synced_at: new Date(),
-        },
-      });
-      count++;
-    }
+    await fetchAllAccuratePages(
+      `${host}/accurate/api/customer/list.do`,
+      headers,
+      {
+        fields: 'id,name,customerNo,customerGroup,suspended,shipZipCode,shipCity,shipProvince,shipStreet',
+      },
+      async (customers) => {
+        for (const cust of customers) {
+          await prisma.pelanggan.upsert({
+            where: { id_pelanggan: cust.customerNo },
+            update: {
+              nama: cust.name,
+              kategori_pelanggan: cust.customerGroup?.name || 'Umum',
+              non_aktif: cust.suspended || false,
+              kota_pengiriman: cust.shipCity,
+              provinsi_pengiriman: cust.shipProvince,
+              alamat_lengkap_pengiriman: cust.shipStreet,
+              synced_at: new Date(),
+            },
+            create: {
+              id_pelanggan: cust.customerNo,
+              nama: cust.name,
+              kategori_pelanggan: cust.customerGroup?.name || 'Umum',
+              non_aktif: cust.suspended || false,
+              kota_pengiriman: cust.shipCity,
+              provinsi_pengiriman: cust.shipProvince,
+              alamat_lengkap_pengiriman: cust.shipStreet,
+              tgl_jam_pembuatan: new Date(),
+              synced_at: new Date(),
+            },
+          });
+          count++;
+        }
+      }
+    );
 
     return count;
   }
