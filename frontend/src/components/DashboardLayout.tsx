@@ -43,7 +43,7 @@ const sidebarSections: SidebarSection[] = [
     label: 'Menu',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { name: 'Laporan Data Analyst', href: '/laporan', icon: TrendingUp },
+      { name: 'Laporan Data', href: '/laporan', icon: TrendingUp },
     ],
   },
   {

@@ -173,7 +173,7 @@ export default function LaporanPage() {
       {/* Report page header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-black text-foreground tracking-tight">Laporan Data Analyst</h2>
+          <h2 className="text-2xl font-black text-foreground tracking-tight">Laporan Data</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Visualisasi tren penjualan, performa tim marketing, sebaran wilayah, dan peramalan pasar
           </p>

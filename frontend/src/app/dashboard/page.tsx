@@ -310,7 +310,7 @@ export default function DashboardPage() {
           onClick={() => router.push('/laporan')}
           className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors"
         >
-          Lihat Laporan Data Analyst lengkap
+          Lihat Laporan Data lengkap
           <ArrowRight size={14} />
         </button>
       </div>
@@ -329,7 +329,7 @@ export default function DashboardPage() {
           <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">
             <h4 className="font-bold text-foreground">Analisis Visual Lanjutan</h4>
             <p className="text-xs text-muted-foreground">
-              Untuk melihat laporan visual grafis seperti tren penjualan harian/bulanan, kontribusi produk terlaris, rasio kategori barang, dan segmentasi RFM pelanggan secara interaktif, silakan buka menu <strong>Laporan Data Analyst</strong>.
+              Untuk melihat laporan visual grafis seperti tren penjualan harian/bulanan, kontribusi produk terlaris, rasio kategori barang, dan segmentasi RFM pelanggan secara interaktif, silakan buka menu <strong>Laporan Data</strong>.
             </p>
           </div>
         </div>
