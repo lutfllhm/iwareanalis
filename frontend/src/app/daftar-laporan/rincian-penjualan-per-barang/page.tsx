@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useDownload } from '@/hooks/useDownload';
+import type { AxiosError } from 'axios';
 
 interface RincianRow {
   nomorFaktur: string;
@@ -104,6 +105,7 @@ export default function RincianPenjualanPerBarangPage() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage on mount, not a derived value
         if (Array.isArray(parsed) && parsed.length > 0) setVisibleColumns(parsed);
       } catch { /* ignore corrupt value */ }
     }
@@ -176,8 +178,9 @@ export default function RincianPenjualanPerBarangPage() {
   const totalRows = rows.length;
   const grandTotal = rows.reduce((sum, r) => sum + (r.totalHarga || 0), 0);
 
-  const errorCode = (error as any)?.response?.data?.code;
-  const errorMsg = (error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate';
+  const apiError = error as AxiosError<{ code?: string; message?: string }> | null;
+  const errorCode = apiError?.response?.data?.code;
+  const errorMsg = apiError?.response?.data?.message || 'Gagal memuat data dari Accurate';
 
   return (
     <DashboardLayout>
@@ -237,7 +240,7 @@ export default function RincianPenjualanPerBarangPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
+      <div className="card-elevated bg-card border border-border rounded-xl p-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
           {/* Date range */}
           <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-2">
@@ -352,7 +355,7 @@ export default function RincianPenjualanPerBarangPage() {
 
       {/* Error state */}
       {isError && (
-        <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5 flex items-start gap-4">
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-5 flex items-start gap-4">
           <AlertCircle size={22} className="text-rose-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <p className="font-bold text-rose-600 dark:text-rose-400 text-sm">Gagal Memuat Data</p>
@@ -372,7 +375,7 @@ export default function RincianPenjualanPerBarangPage() {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="bg-card border border-border rounded-2xl p-12 flex flex-col items-center gap-3">
+        <div className="bg-card border border-border rounded-xl p-12 flex flex-col items-center gap-3">
           <Loader2 size={32} className="text-primary animate-spin" />
           <p className="text-sm text-muted-foreground font-semibold">Mengambil data dari Accurate Online...</p>
         </div>
@@ -380,7 +383,7 @@ export default function RincianPenjualanPerBarangPage() {
 
       {/* Table */}
       {!isLoading && !isError && (
-        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+        <div className="card-elevated bg-card border border-border rounded-xl overflow-hidden">
           {/* Table header info */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">

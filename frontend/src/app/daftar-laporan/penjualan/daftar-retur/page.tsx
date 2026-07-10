@@ -7,6 +7,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import api from '@/lib/api';
 import { CheckCircle, XCircle, Download } from 'lucide-react';
 import { useDownload } from '@/hooks/useDownload';
+import type { AxiosError } from 'axios';
 
 interface ReturPenjualanRow {
   id: number;
@@ -122,7 +123,7 @@ export default function ReturPenjualanPage() {
         <div className="p-4 rounded-xl border bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center space-x-3 shadow-md">
           <XCircle size={20} />
           <span className="text-sm font-semibold">
-            {(error as any)?.response?.data?.message || 'Gagal memuat data dari Accurate'}
+            {(error as AxiosError<{ message?: string }> | null)?.response?.data?.message || 'Gagal memuat data dari Accurate'}
           </span>
         </div>
       )}

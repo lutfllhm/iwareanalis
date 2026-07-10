@@ -4,7 +4,10 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
 import api from '@/lib/api';
-import { UserPlus, Edit3, Trash2, Key, CheckCircle, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { UserPlus, Edit3, Trash2, Key, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import type { AxiosError } from 'axios';
+
+type ApiError = AxiosError<{ message?: string }>;
 
 interface UserRow {
   id: number;
@@ -75,7 +78,7 @@ export default function UsersManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['usersList'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menambahkan user' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -95,7 +98,7 @@ export default function UsersManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['usersList'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal memperbarui user' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -114,7 +117,7 @@ export default function UsersManagementPage() {
       setResetPassValue('');
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal mereset password' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -131,7 +134,7 @@ export default function UsersManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['usersList'] });
       setTimeout(() => setToast(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menghapus user' });
       setTimeout(() => setToast(null), 3000);
     },
@@ -204,7 +207,7 @@ export default function UsersManagementPage() {
         
         {/* SECTION 1: USERS LIST (Left & Center Columns) */}
         <div className="xl:col-span-2 space-y-6">
-          <div className="bg-card border border-border/60 rounded-2xl p-6 shadow-sm overflow-hidden">
+          <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 overflow-hidden">
             <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider mb-5">Daftar Akun Pengguna</h3>
 
             <div className="overflow-x-auto">
@@ -292,7 +295,7 @@ export default function UsersManagementPage() {
         </div>
 
         {/* SECTION 2: AUDIT LOGS MONITOR (Right Column) */}
-        <div className="bg-card border border-border/60 rounded-2xl p-6 shadow-sm flex flex-col h-[500px]">
+        <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 flex flex-col h-[500px]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Log Audit Sistem</h3>
             <span className="text-[10px] bg-indigo-500/10 text-indigo-500 font-bold px-2 py-0.5 rounded-full">15 Terakhir</span>
@@ -365,7 +368,7 @@ export default function UsersManagementPage() {
                 <label className="text-xs font-bold text-muted-foreground uppercase">Role Hak Akses</label>
                 <select
                   value={role}
-                  onChange={(e: any) => setRole(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRole(e.target.value as 'admin' | 'analyst' | 'viewer')}
                   className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm text-foreground focus:outline-none"
                 >
                   <option value="viewer">Viewer (Hanya Lihat)</option>
@@ -425,7 +428,7 @@ export default function UsersManagementPage() {
                 <label className="text-xs font-bold text-muted-foreground uppercase">Role Hak Akses</label>
                 <select
                   value={role}
-                  onChange={(e: any) => setRole(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRole(e.target.value as 'admin' | 'analyst' | 'viewer')}
                   className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm text-foreground focus:outline-none"
                 >
                   <option value="viewer">Viewer (Hanya Lihat)</option>

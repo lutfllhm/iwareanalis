@@ -5,7 +5,7 @@
  * Setiap slot punya pasangan light/dark agar tetap kontras di kedua tema.
  */
 export const CHART_CATEGORICAL = [
-  { light: '#2a78d6', dark: '#3987e5' }, // 1 biru
+  { light: '#696cff', dark: '#8183ff' }, // 1 indigo/violet (brand primary)
   { light: '#1baf7a', dark: '#199e70' }, // 2 aqua
   { light: '#eda100', dark: '#c98500' }, // 3 kuning
   { light: '#008300', dark: '#008300' }, // 4 hijau

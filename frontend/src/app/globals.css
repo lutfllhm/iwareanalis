@@ -2,38 +2,40 @@
 
 @layer base {
   :root {
-    --background: 220 33% 98%;      /* Very light slate-blue background */
-    --foreground: 222 47% 11%;      /* Dark slate text */
-    
-    --card: 0 0% 100%;              /* Pure white cards */
-    --card-foreground: 222 47% 11%;
-    
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    
-    --primary: 221.2 83.2% 53.3%;   /* Vibrant digital blue */
-    --primary-foreground: 210 40% 98%;
-    
-    --secondary: 210 40% 96.1%;     /* Soft slate */
-    --secondary-foreground: 222 47% 11.2%;
-    
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222 47% 11.2%;
-    
-    --destructive: 0 84.2% 60.2%;   /* Crimson error red */
-    --destructive-foreground: 210 40% 98%;
+    --background: 240 23% 97%;      /* Very light violet-tinted background, Sneat-style */
+    --foreground: 240 10% 24%;      /* Soft dark slate text (not pure black) */
 
-    --success: 142.1 76.2% 36.3%;   /* Emerald green */
-    --success-foreground: 355.7 100% 97.3%;
-    
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    
-    --radius: 0.75rem;
+    --card: 0 0% 100%;              /* Pure white cards */
+    --card-foreground: 240 10% 24%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 24%;
+
+    --primary: 239 100% 70%;        /* Sneat signature indigo/violet */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 20% 95%;       /* Soft violet-grey */
+    --secondary-foreground: 240 10% 24%;
+
+    --muted: 240 20% 95%;
+    --muted-foreground: 240 8% 52%;
+
+    --accent: 240 20% 95%;
+    --accent-foreground: 240 10% 24%;
+
+    --destructive: 349 100% 65%;    /* Sneat-style rose/red */
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 47%;         /* Sneat-style green */
+    --success-foreground: 0 0% 100%;
+
+    --border: 240 20% 91%;
+    --input: 240 20% 91%;
+    --ring: 239 100% 70%;
+
+    --sidebar: 0 0% 100%;            /* Sneat sidebar is pure white, distinguished by shadow only */
+
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -46,8 +48,8 @@
     --popover: 222 44% 9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217.2 91.2% 59.8%;   /* Lighter brilliant blue for dark mode contrast */
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 239 100% 75%;        /* Lighter indigo/violet for dark mode contrast */
+    --primary-foreground: 240 20% 12%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -66,9 +68,10 @@
 
     --border: 217.2 28% 20%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 239 100% 75%;
 
-    --glow-primary: 217.2 91.2% 59.8%;
+    --glow-primary: 239 100% 75%;
+    --sidebar: 224 48% 3%;           /* Slightly deeper than background so the sidebar reads as its own plane */
   }
 }
 
@@ -94,7 +97,8 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  
+  --color-sidebar: hsl(var(--sidebar));
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);

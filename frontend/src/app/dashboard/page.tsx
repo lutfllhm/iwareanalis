@@ -26,6 +26,8 @@ import {
   AlertCircle,
   PackageSearch,
   ArrowRight,
+  Rocket,
+  MoreVertical,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -38,6 +40,14 @@ interface KPICardProps {
   isCurrency?: boolean;
   isPercentage?: boolean;
 }
+
+// Sneat-style pastel icon tiles: solid soft background, saturated icon color
+const KPI_ACCENTS: Record<string, { icon: string; iconBg: string }> = {
+  'blue-500': { icon: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-500/12' },
+  'indigo-500': { icon: 'text-primary', iconBg: 'bg-primary/12' },
+  'violet-500': { icon: 'text-fuchsia-600 dark:text-fuchsia-400', iconBg: 'bg-fuchsia-500/12' },
+  'rose-500': { icon: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-500/12' },
+};
 
 function KPICard({ title, value, growth, icon: Icon, color, isCurrency, isPercentage }: KPICardProps) {
   const formatVal = (val: string | number) => {
@@ -55,39 +65,32 @@ function KPICard({ title, value, growth, icon: Icon, color, isCurrency, isPercen
   };
 
   const isGrowthPositive = growth !== undefined && growth >= 0;
+  const accent = KPI_ACCENTS[color] || KPI_ACCENTS['blue-500'];
 
   return (
-    <div className="card-elevated bg-card border border-border/60 hover:border-border rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group">
-      {/* Background soft glow on hover */}
-      <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-5 dark:opacity-10 group-hover:scale-150 transition-transform duration-500 bg-${color}`} />
-
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{title}</span>
-        <div className={`p-2.5 rounded-xl bg-secondary text-foreground`}>
-          <Icon size={20} className={`text-${color}`} />
+    <div className="card-elevated bg-card border border-border/60 hover:border-border rounded-xl p-5 transition-all duration-300">
+      <div className="flex items-start justify-between">
+        <div className={`p-2.5 rounded-lg ${accent.iconBg}`}>
+          <Icon size={20} className={accent.icon} />
         </div>
+        <button className="text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+          <MoreVertical size={16} />
+        </button>
       </div>
 
       <div className="mt-4">
-        <h3 className="glow-text text-2xl font-black text-foreground tracking-tight">
-          {formatVal(value)}
-        </h3>
-        {growth !== undefined && (
-          <div className="flex items-center space-x-1 mt-2">
-            {isGrowthPositive ? (
-              <span className="flex items-center text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-lg">
-                <ArrowUpRight size={14} className="mr-0.5" />
-                {growth.toFixed(1)}%
-              </span>
-            ) : (
-              <span className="flex items-center text-xs font-bold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded-lg">
-                <ArrowDownRight size={14} className="mr-0.5" />
-                {Math.abs(growth).toFixed(1)}%
-              </span>
-            )}
-            <span className="text-[10px] text-muted-foreground font-semibold">vs periode sebelumnya</span>
-          </div>
-        )}
+        <span className="text-xs font-semibold text-muted-foreground">{title}</span>
+        <div className="flex items-end justify-between mt-1">
+          <h3 className="text-xl font-extrabold text-foreground tracking-tight">
+            {formatVal(value)}
+          </h3>
+          {growth !== undefined && (
+            <span className={`flex items-center text-xs font-bold ${isGrowthPositive ? 'text-success' : 'text-destructive'}`}>
+              {isGrowthPositive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+              {Math.abs(growth).toFixed(1)}%
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -140,18 +143,26 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout>
-      {/* Welcome header & Date Range filters */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-foreground tracking-tight">Dashboard Ringkasan</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Ringkasan data analitik penjualan, performa, dan piutang pelanggan
+      {/* Welcome hero card, Sneat-style congratulations banner */}
+      <div className="card-elevated relative overflow-hidden rounded-xl bg-linear-to-r from-primary/10 via-primary/5 to-transparent border border-primary/15 p-6 md:p-7">
+        <div className="absolute -right-6 -top-6 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
+        <div className="absolute right-8 bottom-0 hidden sm:flex h-20 w-20 rounded-2xl bg-linear-to-br from-primary to-fuchsia-500 items-center justify-center shadow-lg shadow-primary/20 rotate-6">
+          <Rocket size={34} className="text-white -rotate-6" />
+        </div>
+        <div className="relative max-w-lg">
+          <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tight">
+            Selamat Datang di AIware Sales! 🎉
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+            Berikut ringkasan performa penjualan, piutang, dan aktivitas pelanggan Anda pada periode terpilih.
           </p>
         </div>
+      </div>
 
-        {/* Date Filter selector */}
-        <div className="flex items-center space-x-3.5 bg-card border border-border rounded-xl px-3.5 py-2">
-          <Calendar className="text-muted-foreground flex-shrink-0" size={16} />
+      {/* Date Range filter */}
+      <div className="flex justify-end">
+        <div className="card-elevated flex items-center space-x-3.5 bg-card border border-border rounded-lg px-3.5 py-2.5">
+          <Calendar className="text-muted-foreground shrink-0" size={16} />
           <input
             type="date"
             value={startDate}
@@ -212,7 +223,7 @@ export default function DashboardPage() {
 
       {/* Secondary Metrics Card grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-primary">
             <Users size={22} />
           </div>
@@ -224,7 +235,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-indigo-500">
             <Layers size={22} />
           </div>
@@ -236,7 +247,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="card-elevated bg-card border border-border/60 rounded-2xl p-5 flex items-center space-x-4">
+        <div className="card-elevated bg-card border border-border/60 rounded-xl p-5 flex items-center space-x-4">
           <div className="p-3 bg-secondary rounded-xl text-rose-500">
             <Undo2 size={22} />
           </div>
@@ -305,7 +316,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Dashboard Action Cards */}
-      <div className="card-elevated bg-card border border-border/60 rounded-2xl p-6">
+      <div className="card-elevated bg-card border border-border/60 rounded-xl p-6">
         <h3 className="text-base font-bold text-foreground mb-4">Informasi Operasional Dashboard</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-2">

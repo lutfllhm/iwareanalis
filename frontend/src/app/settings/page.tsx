@@ -342,7 +342,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             
             {/* Credentials Card */}
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Kredensial API Token</h3>
                 {connectedDbName && (
@@ -411,7 +411,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Cron schedule Card */}
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-4">
               <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Penjadwalan Sinkronisasi Otomatis (Cron)</h3>
               
               <div className="space-y-3">
@@ -463,7 +463,7 @@ export default function SettingsPage() {
         ) : activeTab === 'download' ? (
           /* TAB 3: DOWNLOAD DATABASE SETTINGS */
           <div className="space-y-6">
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-5">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-5">
               <div className="flex items-center space-x-3">
                 <div className="p-2.5 rounded-xl bg-primary/10">
                   <Database size={20} className="text-primary" />
@@ -555,7 +555,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Info card */}
-            <div className="bg-card border border-border/60 rounded-2xl p-5">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-5">
               <h4 className="text-xs font-bold text-foreground uppercase tracking-wider mb-3">Informasi Download</h4>
               <ul className="space-y-2 text-xs text-muted-foreground">
                 <li className="flex items-start space-x-2">
@@ -582,7 +582,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             
             {/* Password resetting card */}
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-4">
               <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Perbarui Password Akun</h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -619,7 +619,7 @@ export default function SettingsPage() {
             </div>
 
             {/* TOTP 2FA Authentication Setup */}
-            <div className="bg-card border border-border/60 rounded-2xl p-6 space-y-4">
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Autentikasi Dua Faktor (2FA - TOTP)</h3>

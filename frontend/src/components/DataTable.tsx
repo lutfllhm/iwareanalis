@@ -37,6 +37,7 @@ interface DataTableProps<T> {
   showExportButtons?: boolean;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic constraint must accept heterogeneous row shapes from callers
 export default function DataTable<T extends Record<string, any>>({
   columns,
   data,
@@ -71,7 +72,7 @@ export default function DataTable<T extends Record<string, any>>({
     
     // Flatten rows for spreadsheet readability
     const exportData = data.map((row) => {
-      const item: Record<string, any> = {};
+      const item: Record<string, unknown> = {};
       columns.forEach((col) => {
         if (typeof col.accessor === 'function') {
           // If accessor is a render function, try to extract value or skip
@@ -94,7 +95,7 @@ export default function DataTable<T extends Record<string, any>>({
     if (data.length === 0) return;
     
     const exportData = data.map((row) => {
-      const item: Record<string, any> = {};
+      const item: Record<string, unknown> = {};
       columns.forEach((col) => {
         if (typeof col.accessor === 'function') {
           item[col.header] = row[col.sortKey || ''] || '';
@@ -121,7 +122,7 @@ export default function DataTable<T extends Record<string, any>>({
   const totalPages = Math.ceil(totalRows / limit);
 
   return (
-    <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
+    <div className="card-elevated bg-card border border-border rounded-xl overflow-hidden transition-all duration-300">
       
       {/* 1. FILTER & EXPORT HEADER TOOLBAR */}
       <div className="p-5 border-b border-border flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 bg-muted/20">

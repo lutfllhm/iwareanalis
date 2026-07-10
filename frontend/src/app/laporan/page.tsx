@@ -181,7 +181,7 @@ export default function LaporanPage() {
 
         {/* Filters and export settings */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-2 bg-card border border-border rounded-xl px-3 py-2">
+          <div className="card-elevated flex items-center space-x-2 bg-card border border-border rounded-lg px-3 py-2">
             <Calendar className="text-muted-foreground" size={16} />
             <input
               type="date"
@@ -386,7 +386,7 @@ export default function LaporanPage() {
       </div>
 
       {/* 2. CUSTOMER RFM SEGMENTATION TABLE */}
-      <div className="card-elevated bg-card border border-border/60 rounded-2xl p-6">
+      <div className="card-elevated bg-card border border-border/60 rounded-xl p-6">
         <div className="flex justify-between items-center mb-5">
           <div>
             <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider">Segmentasi Pelanggan (Analisis RFM)</h3>
