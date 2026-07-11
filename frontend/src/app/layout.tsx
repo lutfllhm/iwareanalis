@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Alware Sales',
+  title: 'IwAnalytics',
   description: 'Dashboard analitik penjualan terintegrasi dengan Accurate Online.',
 };
 

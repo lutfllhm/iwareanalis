@@ -151,7 +151,7 @@ export default function DashboardPage() {
         </div>
         <div className="relative max-w-lg">
           <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tight">
-            Selamat Datang di Alware Sales! 🎉
+            Selamat Datang di IwAnalytics! 🎉
           </h2>
           <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
             Berikut ringkasan performa penjualan, piutang, dan aktivitas pelanggan Anda pada periode terpilih.

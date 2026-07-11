@@ -161,16 +161,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {!isCollapsed && (
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="shrink-0 h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
-                <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
+                <Image src="/logo.png" alt="IwAnalytics" width={32} height={32} className="h-full w-full object-cover" />
               </div>
               <span className="font-extrabold text-[15px] text-foreground tracking-tight truncate">
-                Alware Sales
+                IwAnalytics
               </span>
             </div>
           )}
           {isCollapsed && (
             <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
-              <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
+              <Image src="/logo.png" alt="IwAnalytics" width={32} height={32} className="h-full w-full object-cover" />
             </div>
           )}
           {!isCollapsed && (
@@ -241,9 +241,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="h-16 flex items-center justify-between px-5 border-b border-border/70">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg overflow-hidden shadow-md shadow-primary/25">
-              <Image src="/logo.png" alt="Alware Sales" width={32} height={32} className="h-full w-full object-cover" />
+              <Image src="/logo.png" alt="IwAnalytics" width={32} height={32} className="h-full w-full object-cover" />
             </div>
-            <span className="font-extrabold text-[15px] text-foreground tracking-tight">Alware Sales</span>
+            <span className="font-extrabold text-[15px] text-foreground tracking-tight">IwAnalytics</span>
           </div>
           <button
             onClick={() => setIsMobileOpen(false)}

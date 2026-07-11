@@ -79,7 +79,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 max-w-md text-center">
           <div className="h-16 w-16 rounded-2xl overflow-hidden mx-auto mb-6 shadow-xl shadow-primary/25">
-            <Image src="/logo.png" alt="Alware Sales" width={64} height={64} className="h-full w-full object-cover" />
+            <Image src="/logo.png" alt="IwAnalytics" width={64} height={64} className="h-full w-full object-cover" />
           </div>
           <h2 className="text-2xl font-black text-foreground tracking-tight mb-3">
             Dashboard Analitik Penjualan
@@ -97,7 +97,7 @@ export default function LoginPage() {
           {/* Logo (mobile) */}
           <div className="text-center lg:text-left mb-8">
             <div className="h-11 w-11 rounded-xl overflow-hidden mx-auto lg:mx-0 mb-5 shadow-lg shadow-primary/20">
-              <Image src="/logo.png" alt="Alware Sales" width={44} height={44} className="h-full w-full object-cover" />
+              <Image src="/logo.png" alt="IwAnalytics" width={44} height={44} className="h-full w-full object-cover" />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-foreground">
               {twoFaRequired ? 'Verifikasi Dua Faktor! 🔐' : 'Selamat Datang! 👋'}
@@ -105,7 +105,7 @@ export default function LoginPage() {
             <p className="text-sm text-muted-foreground mt-1.5">
               {twoFaRequired
                 ? 'Masukkan kode autentikasi 6-digit dari aplikasi Google Authenticator Anda'
-                : 'Masuk ke Alware Sales untuk mulai menganalisis data penjualan Anda'}
+                : 'Masuk ke IwAnalytics untuk mulai menganalisis data penjualan Anda'}
             </p>
           </div>
 
