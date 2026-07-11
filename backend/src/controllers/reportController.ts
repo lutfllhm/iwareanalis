@@ -597,9 +597,20 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
           const detail = detailRes.data?.d || {};
           if (!loggedDetailSample) {
             loggedDetailSample = true;
-            // TEMP DEBUG: pastikan nama field yang dibutuhkan sesuai response asli.
+            // TEMP DEBUG: pastikan nilai field yang dibutuhkan sesuai response asli.
             // Hapus log ini setelah dikonfirmasi seluruh kolom terisi benar.
-            logger.info('DEBUG customer/detail.do sample keys=' + Object.keys(detail).join(','));
+            logger.info('DEBUG customer/detail.do sample values=' + JSON.stringify({
+              category: detail.category,
+              categoryId: detail.categoryId,
+              shipStreet: detail.shipStreet,
+              shipZipCode: detail.shipZipCode,
+              shipAddressId: detail.shipAddressId,
+              taxCity: detail.taxCity,
+              taxProvince: detail.taxProvince,
+              createDate: detail.createDate,
+              salesman: detail.salesman,
+              defaultSalesmanId: detail.defaultSalesmanId,
+            }));
           }
           // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
           // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
