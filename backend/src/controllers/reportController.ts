@@ -581,6 +581,12 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
     const customers: any[] = response.data.d || [];
     const sp = response.data.sp || {};
 
+    // TEMP DEBUG: cek nama field salesman yang sebenarnya dikembalikan Accurate
+    // untuk endpoint customer/list.do. Hapus setelah masalah kolom kosong terjawab.
+    if (customers[0]) {
+      logger.info('DEBUG customer/list.do sample row: ' + JSON.stringify(customers[0]));
+    }
+
     const rows = customers.map((cust) => ({
       idPelanggan: cust.customerNo,
       idKaryawanDefaultPenjual: cust.salesman?.salesNo || '',
