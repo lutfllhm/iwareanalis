@@ -36,7 +36,7 @@ export default function SettingsPage() {
   const [appKey, setAppKey] = useState('');
   const [signatureSecret, setSignatureSecret] = useState('');
   const [apiToken, setApiToken] = useState('');
-  const [cronInterval, setCronInterval] = useState('0 */4 * * *');
+  const [cronInterval, setCronInterval] = useState('*/30 * * * * *');
   const [connectedDbName, setConnectedDbName] = useState('');
 
   // Password Form Settings
@@ -100,7 +100,7 @@ export default function SettingsPage() {
       setAppKey(settingsData.ACCURATE_APP_KEY || '');
       setSignatureSecret(settingsData.ACCURATE_SIGNATURE_SECRET || '');
       setApiToken(settingsData.ACCURATE_API_TOKEN || '');
-      setCronInterval(settingsData.SYNC_INTERVAL_CRON || '0 */4 * * *');
+      setCronInterval(settingsData.SYNC_INTERVAL_CRON || '*/30 * * * * *');
       setConnectedDbName(settingsData.ACCURATE_DB_NAME || '');
     }
     if (userProfile) {
@@ -421,13 +421,28 @@ export default function SettingsPage() {
                     type="text"
                     value={cronInterval}
                     onChange={(e) => setCronInterval(e.target.value)}
-                    placeholder="0 */4 * * *"
+                    placeholder="*/30 * * * * *"
                     className="w-full px-4 py-2.5 rounded-xl border border-input bg-background/50 text-sm font-mono text-foreground focus:outline-none"
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    Format 6-field (detik menit jam tanggal bulan hari). Interval sangat singkat akan sering memanggil API Accurate — pastikan tidak melebihi batas rate limit akun Anda.
+                  </p>
                 </div>
 
                 {/* Preconfigured selector boxes */}
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setCronInterval('*/30 * * * * *')}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
+                  >
+                    Setiap 30 Detik (Default)
+                  </button>
+                  <button
+                    onClick={() => setCronInterval('0 * * * * *')}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
+                  >
+                    Setiap 1 Menit
+                  </button>
                   <button
                     onClick={() => setCronInterval('0 */1 * * *')}
                     className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
@@ -438,7 +453,7 @@ export default function SettingsPage() {
                     onClick={() => setCronInterval('0 */4 * * *')}
                     className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
                   >
-                    Setiap 4 Jam (Default)
+                    Setiap 4 Jam
                   </button>
                   <button
                     onClick={() => setCronInterval('0 0 * * *')}

@@ -30,7 +30,9 @@ export async function syncModule(req: AuthenticatedRequest, res: Response) {
       },
     });
 
-    const result = await AccurateService.syncModule(moduleName);
+    // Manual "Sync Now" always pulls full history, since the user may be
+    // connecting for the first time or recovering from a gap in scheduled syncs.
+    const result = await AccurateService.syncModule(moduleName, true);
 
     if (result.success) {
       return res.status(200).json({

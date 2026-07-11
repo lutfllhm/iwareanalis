@@ -21,14 +21,23 @@ function formatAccurateDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-// Berapa lama ke belakang histori transaksi ditarik saat sync (default 2 tahun),
+// Berapa lama ke belakang histori transaksi ditarik saat sync manual/awal (2 tahun),
 // supaya tidak hanya mengandalkan batch/halaman default yang dikembalikan Accurate.
 const SYNC_HISTORY_YEARS = 2;
 
-function getSyncDateRange(): { startDate: string; endDate: string } {
+// Sync terjadwal (cron) berjalan berulang dengan interval singkat, jadi cukup
+// menarik beberapa hari terakhir (invoice baru atau yang baru saja diedit di
+// Accurate) alih-alih menarik ulang 2 tahun penuh setiap siklus.
+const SCHEDULED_SYNC_LOOKBACK_DAYS = 7;
+
+function getSyncDateRange(fullHistory: boolean): { startDate: string; endDate: string } {
   const end = new Date();
   const start = new Date();
-  start.setFullYear(start.getFullYear() - SYNC_HISTORY_YEARS);
+  if (fullHistory) {
+    start.setFullYear(start.getFullYear() - SYNC_HISTORY_YEARS);
+  } else {
+    start.setDate(start.getDate() - SCHEDULED_SYNC_LOOKBACK_DAYS);
+  }
   return { startDate: formatAccurateDate(start), endDate: formatAccurateDate(end) };
 }
 
@@ -230,7 +239,7 @@ export class AccurateService {
   /**
    * Synchronize modules from Accurate Online to MySQL
    */
-  static async syncModule(moduleName: string): Promise<{ success: boolean; count: number; error?: string }> {
+  static async syncModule(moduleName: string, fullHistory: boolean = false): Promise<{ success: boolean; count: number; error?: string }> {
     const startTime = Date.now();
     logger.info(`Starting synchronization for module: ${moduleName}`);
 
@@ -291,11 +300,11 @@ export class AccurateService {
       } else if (moduleName === 'Pelanggan') {
         syncCount = await this.pullPelanggan(host, headers);
       } else if (moduleName === 'Faktur Penjualan') {
-        syncCount = await this.pullFakturPenjualan(host, headers);
+        syncCount = await this.pullFakturPenjualan(host, headers, fullHistory);
       } else if (moduleName === 'Retur Penjualan') {
-        syncCount = await this.pullReturPenjualan(host, headers);
+        syncCount = await this.pullReturPenjualan(host, headers, fullHistory);
       } else if (moduleName === 'Rincian Penjualan Barang') {
-        syncCount = await this.pullRincianPenjualanBarang(host, headers);
+        syncCount = await this.pullRincianPenjualanBarang(host, headers, fullHistory);
       } else if (moduleName === 'Mutasi Serial Number') {
         syncCount = await this.pullMutasiSerialNumber(host, headers);
       } else if (moduleName === 'Ringkasan Mutasi Stok') {
@@ -433,11 +442,11 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullFakturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
+  private static async pullFakturPenjualan(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
     // API endpoint: POST /api/sales-invoice/list.do
     // Tanpa startDate/endDate & paginasi, Accurate hanya mengembalikan satu
     // halaman data terbaru (±100-200 baris) dan histori lama diam-diam hilang.
-    const { startDate, endDate } = getSyncDateRange();
+    const { startDate, endDate } = getSyncDateRange(fullHistory);
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -692,9 +701,9 @@ export class AccurateService {
     return count;
   }
 
-  private static async pullReturPenjualan(host: string, headers: Record<string, string>): Promise<number> {
+  private static async pullReturPenjualan(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
     // API endpoint: POST /api/sales-return/list.do
-    const { startDate, endDate } = getSyncDateRange();
+    const { startDate, endDate } = getSyncDateRange(fullHistory);
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -760,8 +769,8 @@ export class AccurateService {
    * barang diturunkan dari detailList milik /api/sales-invoice/list.do,
    * sama seperti pendekatan pullFakturPenjualan dan reportController.ts.
    */
-  private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>): Promise<number> {
-    const { startDate, endDate } = getSyncDateRange();
+  private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
+    const { startDate, endDate } = getSyncDateRange(fullHistory);
     let count = 0;
 
     await fetchAllAccuratePages(
