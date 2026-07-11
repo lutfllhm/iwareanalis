@@ -597,11 +597,15 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
           const detail = detailRes.data?.d || {};
           if (!loggedDetailSample) {
             loggedDetailSample = true;
-            // TEMP DEBUG: pastikan nama field salesman/salesman2 sesuai response asli.
-            // Hapus log ini setelah dikonfirmasi kolom Default Penjual terisi benar.
+            // TEMP DEBUG: pastikan nama field yang dibutuhkan sesuai response asli.
+            // Hapus log ini setelah dikonfirmasi seluruh kolom terisi benar.
             logger.info('DEBUG customer/detail.do sample keys=' + Object.keys(detail).join(','));
           }
-          return { ...cust, salesman: detail.salesman, salesman2: detail.salesman2 };
+          // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
+          // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
+          // salesman) hanya tersedia di customer/detail.do, jadi detail dijadikan
+          // sumber utama dan ringkasan list sebagai fallback saja.
+          return { ...cust, ...detail };
         } catch (detailErr: any) {
           logger.error(`Gagal ambil detail pelanggan id=${cust.id}: ${detailErr.message}`);
           return cust;
