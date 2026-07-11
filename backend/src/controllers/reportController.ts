@@ -560,7 +560,7 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
     const headers = await AccurateService.getApiTokenHeaders();
 
     const params: Record<string, string> = {
-      fields:   'id,name,customerNo,customerGroup,suspended,shipCity,shipProvince,shipStreet,createdTime,salesman,salesman2',
+      fields:   'id,name,customerNo,customerGroup,suspended,shipCity,shipProvince,shipStreet,createdTime',
       pageSize: String(limit),
       page:     String(page),
     };
@@ -578,14 +578,36 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
       return res.status(502).json({ message: `Accurate API error: ${errMsg}` });
     }
 
-    const customers: any[] = response.data.d || [];
+    const customerSummaries: any[] = response.data.d || [];
     const sp = response.data.sp || {};
 
-    // TEMP DEBUG: cek nama field salesman yang sebenarnya dikembalikan Accurate
-    // untuk endpoint customer/list.do. Hapus setelah masalah kolom kosong terjawab.
-    if (customers[0]) {
-      logger.info('DEBUG customer/list.do sample row: ' + JSON.stringify(customers[0]));
-    }
+    // customer/list.do tidak menyertakan info salesman (Default Penjual di tab
+    // "Penjualan" pada form Accurate) — field itu hanya tersedia lewat
+    // customer/detail.do per pelanggan, sama seperti pola detail invoice di
+    // getRincianPenjualanPerBarang di atas.
+    let loggedDetailSample = false;
+    const customers = await Promise.all(
+      customerSummaries.map(async (cust) => {
+        try {
+          const detailRes = await axios.get(`${host}/accurate/api/customer/detail.do`, {
+            params: { id: cust.id },
+            headers,
+            maxRedirects: 5,
+          });
+          const detail = detailRes.data?.d || {};
+          if (!loggedDetailSample) {
+            loggedDetailSample = true;
+            // TEMP DEBUG: pastikan nama field salesman/salesman2 sesuai response asli.
+            // Hapus log ini setelah dikonfirmasi kolom Default Penjual terisi benar.
+            logger.info('DEBUG customer/detail.do sample keys=' + Object.keys(detail).join(','));
+          }
+          return { ...cust, salesman: detail.salesman, salesman2: detail.salesman2 };
+        } catch (detailErr: any) {
+          logger.error(`Gagal ambil detail pelanggan id=${cust.id}: ${detailErr.message}`);
+          return cust;
+        }
+      })
+    );
 
     const rows = customers.map((cust) => ({
       idPelanggan: cust.customerNo,
