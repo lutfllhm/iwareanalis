@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
-import { AccurateService } from '../services/accurateService';
+import { AccurateService, parseAccurateDate } from '../services/accurateService';
 import { config } from '../config';
 import prisma from '../services/db';
 import logger from '../services/logger';
@@ -585,7 +585,6 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
     // "Penjualan" pada form Accurate) — field itu hanya tersedia lewat
     // customer/detail.do per pelanggan, sama seperti pola detail invoice di
     // getRincianPenjualanPerBarang di atas.
-    let loggedDetailSample = false;
     const customers = await Promise.all(
       customerSummaries.map(async (cust) => {
         try {
@@ -595,23 +594,6 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
             maxRedirects: 5,
           });
           const detail = detailRes.data?.d || {};
-          if (!loggedDetailSample) {
-            loggedDetailSample = true;
-            // TEMP DEBUG: pastikan nilai field yang dibutuhkan sesuai response asli.
-            // Hapus log ini setelah dikonfirmasi seluruh kolom terisi benar.
-            logger.info('DEBUG customer/detail.do sample values=' + JSON.stringify({
-              category: detail.category,
-              categoryId: detail.categoryId,
-              shipStreet: detail.shipStreet,
-              shipZipCode: detail.shipZipCode,
-              shipAddressId: detail.shipAddressId,
-              taxCity: detail.taxCity,
-              taxProvince: detail.taxProvince,
-              createDate: detail.createDate,
-              salesman: detail.salesman,
-              defaultSalesmanId: detail.defaultSalesmanId,
-            }));
-          }
           // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
           // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
           // salesman) hanya tersedia di customer/detail.do, jadi detail dijadikan
@@ -626,15 +608,22 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
 
     const rows = customers.map((cust) => ({
       idPelanggan: cust.customerNo,
-      idKaryawanDefaultPenjual: cust.salesman?.salesNo || '',
+      // customer/detail.do mengembalikan salesman sebagai objek karyawan penuh,
+      // dengan "number" (bukan "salesNo") sebagai kode karyawan (mis. "E.00103").
+      idKaryawanDefaultPenjual: cust.salesman?.number || '',
       namaDefaultPenjual: cust.salesman?.name || '',
-      idKaryawanTenagaPenjualKedua: cust.salesman2?.salesNo || '',
+      // Tidak ada field salesman2/tenaga penjual kedua di response Accurate untuk
+      // pelanggan yang diamati — dibiarkan kosong bila memang tidak tersedia.
+      idKaryawanTenagaPenjualKedua: cust.salesman2?.number || '',
       nama: cust.name,
-      kategoriPelanggan: cust.customerGroup?.name || '',
+      // Kategori pelanggan ada di field "category" (objek {id, name, ...}), bukan "customerGroup".
+      kategoriPelanggan: cust.category?.name || '',
       nonAktif: cust.suspended || false,
       kotaPengiriman: cust.shipCity || '',
       provinsiPengiriman: cust.shipProvince || '',
-      tglJamPembuatan: cust.createdTime || null,
+      // Tanggal dibuat ada di field "createDate" (bukan "createdTime"), berformat
+      // "DD/MM/YYYY HH:mm:ss" ala Accurate — perlu diparse manual, bukan new Date() langsung.
+      tglJamPembuatan: cust.createDate ? parseAccurateDate(cust.createDate).toISOString() : null,
       alamatLengkapPengiriman: cust.shipStreet || '',
     }));
 

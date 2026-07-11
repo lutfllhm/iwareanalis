@@ -6,15 +6,19 @@ import { config } from '../config';
 import logger from './logger';
 import { SyncStatus } from '@prisma/client';
 
-// Accurate Online API mengembalikan tanggal sebagai string "DD/MM/YYYY".
-// `new Date(str)` men-treat string bergaya slash sebagai MM/DD/YYYY (US),
-// sehingga hari & bulan tertukar. Parse manual berdasar format Accurate.
-function parseAccurateDate(value: string | undefined | null): Date {
+// Accurate Online API mengembalikan tanggal sebagai string "DD/MM/YYYY", kadang
+// dengan jam menyertai (mis. createDate = "DD/MM/YYYY HH:mm:ss"). `new Date(str)`
+// men-treat string bergaya slash sebagai MM/DD/YYYY (US), sehingga hari & bulan
+// tertukar. Parse manual berdasar format Accurate.
+export function parseAccurateDate(value: string | undefined | null): Date {
   if (!value) return new Date(NaN);
-  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?$/.exec(value.trim());
   if (!match) return new Date(value);
-  const [, day, month, year] = match;
-  return new Date(Number(year), Number(month) - 1, Number(day));
+  const [, day, month, year, hour, minute, second] = match;
+  return new Date(
+    Number(year), Number(month) - 1, Number(day),
+    hour ? Number(hour) : 0, minute ? Number(minute) : 0, second ? Number(second) : 0
+  );
 }
 
 function formatAccurateDate(d: Date): string {
