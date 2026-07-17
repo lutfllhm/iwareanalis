@@ -143,7 +143,11 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           });
           if (!loggedSample) {
             loggedSample = true;
-            logger.info(`Sample detail.do response keys=${Object.keys(detailRes.data?.d || {}).join(',')}`);
+            const d = detailRes.data?.d || {};
+            logger.info('DEBUG rincian inv summary salesman=' + JSON.stringify(inv.salesman));
+            logger.info('DEBUG rincian detail.do salesman=' + JSON.stringify(d.salesman));
+            const firstItem = (d.detailItem || d.detailList || [])[0];
+            logger.info('DEBUG rincian first detailItem=' + JSON.stringify(firstItem));
           }
           return { ...inv, detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [] };
         } catch (detailErr: any) {
@@ -182,7 +186,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
         rows.push({
           nomorFaktur:    inv.number,
-          tanggal:        inv.transDate,
+          tanggal:        inv.transDate ? parseAccurateDate(inv.transDate).toISOString() : null,
           kodeBarang,
           namaBarang,
           kategoriBarang: line.item?.itemCategory?.name || '',
