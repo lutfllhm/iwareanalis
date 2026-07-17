@@ -416,6 +416,8 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
     const returns: any[] = response.data.d || [];
     const sp = response.data.sp || {};
 
+    logger.info('DEBUG raw retur[0]: ' + JSON.stringify(returns[0]));
+
     const rows = returns.map((ret) => ({
       id: ret.id,
       nomor: ret.number,
