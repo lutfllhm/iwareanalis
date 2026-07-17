@@ -565,6 +565,14 @@ export async function getDaftarBarangJasa(req: AuthenticatedRequest, res: Respon
     const items: any[] = response.data.d || [];
     const sp = response.data.sp || {};
 
+    if (items[0]) {
+      logger.info('DEBUG barang-jasa item[0] stock fields: ' + JSON.stringify({
+        quantity: items[0].quantity,
+        totalQuantity: items[0].totalQuantity,
+        allKeys: Object.keys(items[0]),
+      }));
+    }
+
     const rows = items.map((item) => ({
       kodeBarang: item.no,
       namaBarang: item.name,
