@@ -457,7 +457,7 @@ export class AccurateService {
       `${host}/accurate/api/sales-invoice/list.do`,
       headers,
       {
-        fields: 'number,transDate,customer,totalAmount,paymentAmount,salesman,detailList',
+        fields: 'id,number,transDate,customer,totalAmount,paymentAmount,salesman',
         startDate,
         endDate,
       },
@@ -505,44 +505,55 @@ export class AccurateService {
             where: { nomor: inv.number },
           });
 
-          // 3. Process Invoice Details list (detailList)
-          if (inv.detailList && Array.isArray(inv.detailList)) {
-            for (const line of inv.detailList) {
-              const itemNo = line.item?.no || 'BRG-UNKNOWN';
-              const itemName = line.item?.name || 'Barang Hilang';
+          // 3. sales-invoice/list.do tidak pernah mengembalikan detailList terisi
+          // (walau field diminta) — barisnya harus diambil lewat detail.do per invoice.
+          let detailItems: any[] = [];
+          try {
+            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+              params: { id: inv.id },
+              headers,
+              maxRedirects: 5,
+            });
+            detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
+          } catch (detailErr: any) {
+            logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
+          }
 
-              // Ensure item master exists for FK constraint
-              await prisma.barangJasa.upsert({
-                where: { kode_barang: itemNo },
-                update: {},
-                create: {
-                  kode_barang: itemNo,
-                  nama_barang: itemName,
-                  kategori_barang: 'Umum',
-                  tgl_jam_pembuatan: new Date(),
-                  kts_gdng_pengguna: 0,
-                  kts_semua_gdng: 0,
-                  synced_at: new Date(),
-                },
-              });
+          for (const line of detailItems) {
+            const itemNo = line.item?.no || 'BRG-UNKNOWN';
+            const itemName = line.item?.name || 'Barang Hilang';
 
-              await prisma.rincianPenjualanBarang.create({
-                data: {
-                  nomor: inv.number,
-                  kode: itemNo,
-                  nama_barang: itemName,
-                  kuantitas: line.quantity || 0,
-                  harga: line.unitPrice || 0,
-                  total_harga: (line.quantity || 0) * (line.unitPrice || 0),
-                  penjualan: (line.quantity || 0) * (line.unitPrice || 0),
-                  tanggal: parseAccurateDate(inv.transDate),
-                  nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
-                  nama_tenaga_penjual: salesName,
-                  id_karyawan_tenaga_penjual: salesId,
-                  synced_at: new Date(),
-                },
-              });
-            }
+            // Ensure item master exists for FK constraint
+            await prisma.barangJasa.upsert({
+              where: { kode_barang: itemNo },
+              update: {},
+              create: {
+                kode_barang: itemNo,
+                nama_barang: itemName,
+                kategori_barang: 'Umum',
+                tgl_jam_pembuatan: new Date(),
+                kts_gdng_pengguna: 0,
+                kts_semua_gdng: 0,
+                synced_at: new Date(),
+              },
+            });
+
+            await prisma.rincianPenjualanBarang.create({
+              data: {
+                nomor: inv.number,
+                kode: itemNo,
+                nama_barang: itemName,
+                kuantitas: line.quantity || 0,
+                harga: line.unitPrice || 0,
+                total_harga: (line.quantity || 0) * (line.unitPrice || 0),
+                penjualan: (line.quantity || 0) * (line.unitPrice || 0),
+                tanggal: parseAccurateDate(inv.transDate),
+                nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
+                nama_tenaga_penjual: salesName,
+                id_karyawan_tenaga_penjual: salesId,
+                synced_at: new Date(),
+              },
+            });
           }
           count++;
         }
