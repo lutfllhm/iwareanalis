@@ -81,6 +81,7 @@ export default function DaftarFakturPenjualanPage() {
     try {
       const response = await api.get('/data/faktur-penjualan/download', {
         responseType: 'blob',
+        params: startDate || endDate ? { startDate, endDate } : undefined,
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');

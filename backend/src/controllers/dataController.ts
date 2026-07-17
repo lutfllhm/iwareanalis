@@ -420,14 +420,31 @@ export async function downloadPelanggan(_req: AuthenticatedRequest, res: Respons
 }
 
 /**
+ * Helper: Build a Prisma "tanggal" range filter from optional startDate/endDate
+ * query params (format "YYYY-MM-DD"). endDate is inclusive through end-of-day.
+ */
+function dateRangeFilter(req: AuthenticatedRequest): { gte?: Date; lte?: Date } | undefined {
+  const startDate = req.query.startDate as string | undefined;
+  const endDate = req.query.endDate as string | undefined;
+  if (!startDate && !endDate) return undefined;
+
+  const range: { gte?: Date; lte?: Date } = {};
+  if (startDate) range.gte = new Date(`${startDate}T00:00:00`);
+  if (endDate) range.lte = new Date(`${endDate}T23:59:59.999`);
+  return range;
+}
+
+/**
  * Download all Faktur Penjualan as SQL
  */
-export async function downloadFakturPenjualan(_req: AuthenticatedRequest, res: Response) {
+export async function downloadFakturPenjualan(req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('faktur-penjualan'))) {
     return res.status(403).json({ message: 'Download untuk modul Faktur Penjualan tidak diaktifkan' });
   }
   try {
+    const tanggal = dateRangeFilter(req);
     const rows = await prisma.fakturPenjualan.findMany({
+      where: tanggal ? { tanggal } : undefined,
       include: { pelanggan: { select: { nama: true } } },
       orderBy: { tanggal: 'desc' },
     });
@@ -456,12 +473,16 @@ export async function downloadFakturPenjualan(_req: AuthenticatedRequest, res: R
 /**
  * Download all Rincian Penjualan as SQL
  */
-export async function downloadRincianPenjualan(_req: AuthenticatedRequest, res: Response) {
+export async function downloadRincianPenjualan(req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('rincian-penjualan'))) {
     return res.status(403).json({ message: 'Download untuk modul Rincian Penjualan tidak diaktifkan' });
   }
   try {
-    const rows = await prisma.rincianPenjualanBarang.findMany({ orderBy: { tanggal: 'desc' } });
+    const tanggal = dateRangeFilter(req);
+    const rows = await prisma.rincianPenjualanBarang.findMany({
+      where: tanggal ? { tanggal } : undefined,
+      orderBy: { tanggal: 'desc' },
+    });
     const sql = toSQLInsert('rincian_penjualan_barang', rows as any[]);
     const filename = `rincian_penjualan_${new Date().toISOString().split('T')[0]}.sql`;
     res.setHeader('Content-Type', 'application/sql; charset=utf-8');
@@ -476,12 +497,14 @@ export async function downloadRincianPenjualan(_req: AuthenticatedRequest, res: 
 /**
  * Download all Retur Penjualan as SQL
  */
-export async function downloadReturPenjualan(_req: AuthenticatedRequest, res: Response) {
+export async function downloadReturPenjualan(req: AuthenticatedRequest, res: Response) {
   if (!(await isDownloadAllowed('retur-penjualan'))) {
     return res.status(403).json({ message: 'Download untuk modul Retur Penjualan tidak diaktifkan' });
   }
   try {
+    const tanggal = dateRangeFilter(req);
     const rows = await prisma.returPenjualan.findMany({
+      where: tanggal ? { tanggal } : undefined,
       include: { pelanggan: { select: { nama: true } } },
       orderBy: { tanggal: 'desc' },
     });

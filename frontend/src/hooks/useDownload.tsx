@@ -29,11 +29,18 @@ export function useDownload(moduleKey: string, endpoint: string, filename: strin
   // Whether download is allowed for this module (default true if config not loaded)
   const canDownload: boolean = downloadConfig?.enabledModules?.includes(moduleKey) ?? true;
 
-  const handleDownload = async (onSuccess?: (msg: string) => void, onError?: (msg: string) => void) => {
+  const handleDownload = async (
+    onSuccess?: (msg: string) => void,
+    onError?: (msg: string) => void,
+    dateRange?: { startDate?: string; endDate?: string }
+  ) => {
     setIsDownloading(true);
     setDownloadError(null);
     try {
-      const response = await api.get(endpoint, { responseType: 'blob' });
+      const response = await api.get(endpoint, {
+        responseType: 'blob',
+        params: dateRange?.startDate || dateRange?.endDate ? dateRange : undefined,
+      });
 
       const blob = response.data;
       const url = URL.createObjectURL(blob);
