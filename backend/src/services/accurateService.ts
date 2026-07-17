@@ -464,7 +464,7 @@ export class AccurateService {
       async (invoices) => {
         for (const inv of invoices) {
           const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
-          const salesId = inv.salesman?.salesNo || 'SALES-UNKNOWN';
+          const salesId = inv.salesman?.number || 'SALES-UNKNOWN';
           const salesName = inv.salesman?.name || 'General Sales';
 
           // 1. Ensure customer exists to satisfy foreign key constraints
@@ -721,7 +721,7 @@ export class AccurateService {
       async (returns) => {
         for (const ret of returns) {
           const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
-          const salesId = ret.salesman?.salesNo || 'SALES-UNKNOWN';
+          const salesId = ret.salesman?.number || 'SALES-UNKNOWN';
 
           // Ensure customer exists for FK constraint
           await prisma.pelanggan.upsert({
@@ -821,7 +821,7 @@ export class AccurateService {
                 tanggal: parseAccurateDate(inv.transDate),
                 nama_pelanggan: inv.customer?.name || 'Umum',
                 nama_tenaga_penjual: inv.salesman?.name || 'General',
-                id_karyawan_tenaga_penjual: inv.salesman?.salesNo || 'SALES-UNKNOWN',
+                id_karyawan_tenaga_penjual: inv.salesman?.number || 'SALES-UNKNOWN',
                 synced_at: new Date(),
               },
             });
