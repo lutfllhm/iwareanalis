@@ -144,10 +144,10 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           if (!loggedSample) {
             loggedSample = true;
             const d = detailRes.data?.d || {};
-            logger.info('DEBUG rincian inv summary salesman=' + JSON.stringify(inv.salesman));
-            logger.info('DEBUG rincian detail.do salesman=' + JSON.stringify(d.salesman));
             const firstItem = (d.detailItem || d.detailList || [])[0];
-            logger.info('DEBUG rincian first detailItem=' + JSON.stringify(firstItem));
+            logger.info('DEBUG rincian item field=' + JSON.stringify(firstItem?.item));
+            logger.info('DEBUG rincian salesmanList=' + JSON.stringify(firstItem?.salesmanList));
+            logger.info('DEBUG rincian salesmanId=' + firstItem?.salesmanId + ' salesman1Id=' + firstItem?.salesman1Id);
           }
           return { ...inv, detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [] };
         } catch (detailErr: any) {
