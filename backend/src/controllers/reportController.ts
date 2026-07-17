@@ -660,6 +660,13 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
             maxRedirects: 5,
           });
           const detail = detailRes.data?.d || {};
+          if (!(global as any).__loggedCustDetail) {
+            (global as any).__loggedCustDetail = true;
+            const salesKeys = Object.keys(detail).filter((k) => /salesman/i.test(k));
+            logger.info('DEBUG customer detail sales-related fields: ' + JSON.stringify(
+              Object.fromEntries(salesKeys.map((k) => [k, detail[k]]))
+            ));
+          }
           // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
           // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
           // salesman) hanya tersedia di customer/detail.do, jadi detail dijadikan
