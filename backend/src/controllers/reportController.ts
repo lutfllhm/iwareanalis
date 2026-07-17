@@ -336,7 +336,7 @@ export async function getDaftarFakturPenjualan(req: AuthenticatedRequest, res: R
       id_pelanggan: inv.customer?.customerNo || '',
       nama_pelanggan: inv.customer?.name || '',
       id_karyawan_penjual_utama: inv.salesman?.number || '',
-      tanggal: inv.transDate,
+      tanggal: inv.transDate ? parseAccurateDate(inv.transDate).toISOString() : null,
       total: inv.totalAmount || 0,
       pembayaran: inv.paymentAmount || 0,
     }));
@@ -418,13 +418,26 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
 
     logger.info('DEBUG raw retur[0]: ' + JSON.stringify(returns[0]));
 
+    if (returns[0]?.id) {
+      try {
+        const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
+          params: { id: String(returns[0].id) },
+          headers,
+          maxRedirects: 5,
+        });
+        logger.info('DEBUG detail retur: ' + JSON.stringify(detailRes.data?.d));
+      } catch (e: any) {
+        logger.info('DEBUG detail retur ERROR: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
+      }
+    }
+
     const rows = returns.map((ret) => ({
       id: ret.id,
       nomor: ret.number,
       id_pelanggan: ret.customer?.customerNo || '',
       nama_pelanggan: ret.customer?.name || '',
       id_karyawan_penjual_utama: ret.salesman?.number || '',
-      tanggal: ret.transDate,
+      tanggal: ret.transDate ? parseAccurateDate(ret.transDate).toISOString() : null,
       total: ret.totalAmount || 0,
       pembayaran_faktur_penjualan: ret.totalAmount || 0,
       nilai_retur_faktur: ret.totalAmount || 0,
