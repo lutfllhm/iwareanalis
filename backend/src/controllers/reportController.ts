@@ -431,6 +431,20 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
         logger.info('DEBUG detail retur - sales-related fields: ' + JSON.stringify(
           Object.fromEntries(salesKeys.map((k) => [k, detailData[k]]))
         ));
+
+        const masterSalesmanId = detailData.masterSalesmanId;
+        if (masterSalesmanId) {
+          try {
+            const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
+              params: { id: String(masterSalesmanId) },
+              headers,
+              maxRedirects: 5,
+            });
+            logger.info('DEBUG employee/detail.do for masterSalesmanId=' + masterSalesmanId + ': ' + JSON.stringify(empRes.data?.d));
+          } catch (empErr: any) {
+            logger.info('DEBUG employee/detail.do ERROR: ' + (empErr.response?.data ? JSON.stringify(empErr.response.data) : empErr.message));
+          }
+        }
       } catch (e: any) {
         logger.info('DEBUG detail retur ERROR: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
       }
