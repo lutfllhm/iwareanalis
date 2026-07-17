@@ -425,7 +425,12 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
           headers,
           maxRedirects: 5,
         });
-        logger.info('DEBUG detail retur: ' + JSON.stringify(detailRes.data?.d));
+        const detailData = detailRes.data?.d || {};
+        const salesKeys = Object.keys(detailData).filter((k) => /sales/i.test(k));
+        logger.info('DEBUG detail retur - all top-level keys: ' + Object.keys(detailData).join(','));
+        logger.info('DEBUG detail retur - sales-related fields: ' + JSON.stringify(
+          Object.fromEntries(salesKeys.map((k) => [k, detailData[k]]))
+        ));
       } catch (e: any) {
         logger.info('DEBUG detail retur ERROR: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
       }
