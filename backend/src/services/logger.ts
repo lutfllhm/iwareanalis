@@ -25,21 +25,18 @@ const logger = winston.createLogger({
   ],
 });
 
-// If not in production, log to console with readable format
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(({ level, message, timestamp, stack }) => {
-          if (stack) {
-            return `[${timestamp}] ${level}: ${message}\n${stack}`;
-          }
-          return `[${timestamp}] ${level}: ${message}`;
-        })
-      ),
-    })
-  );
-}
+logger.add(
+  new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.printf(({ level, message, timestamp, stack }) => {
+        if (stack) {
+          return `[${timestamp}] ${level}: ${message}\n${stack}`;
+        }
+        return `[${timestamp}] ${level}: ${message}`;
+      })
+    ),
+  })
+);
 
 export default logger;
