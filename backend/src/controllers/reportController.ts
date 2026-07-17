@@ -416,51 +416,58 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
     const returns: any[] = response.data.d || [];
     const sp = response.data.sp || {};
 
-    logger.info('DEBUG raw retur[0]: ' + JSON.stringify(returns[0]));
-
-    if (returns[0]?.id) {
-      try {
-        const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
-          params: { id: String(returns[0].id) },
-          headers,
-          maxRedirects: 5,
-        });
-        const detailData = detailRes.data?.d || {};
-        const salesKeys = Object.keys(detailData).filter((k) => /sales/i.test(k));
-        logger.info('DEBUG detail retur - all top-level keys: ' + Object.keys(detailData).join(','));
-        logger.info('DEBUG detail retur - sales-related fields: ' + JSON.stringify(
-          Object.fromEntries(salesKeys.map((k) => [k, detailData[k]]))
-        ));
-
-        const masterSalesmanId = detailData.masterSalesmanId;
-        if (masterSalesmanId) {
-          try {
-            const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
-              params: { id: String(masterSalesmanId) },
-              headers,
-              maxRedirects: 5,
-            });
-            logger.info('DEBUG employee/detail.do for masterSalesmanId=' + masterSalesmanId + ': ' + JSON.stringify(empRes.data?.d));
-          } catch (empErr: any) {
-            logger.info('DEBUG employee/detail.do ERROR: ' + (empErr.response?.data ? JSON.stringify(empErr.response.data) : empErr.message));
-          }
+    // sales-return/list.do tidak menyertakan objek "salesman" seperti sales-invoice.
+    // Satu-satunya cara mendapatkan tenaga penjual adalah lewat sales-return/detail.do
+    // (field "masterSalesmanId", hanya ID numerik internal), lalu resolve ID tersebut
+    // ke kode karyawan (mis. "E.00038") via employee/detail.do.
+    const masterSalesmanIds = await Promise.all(
+      returns.map(async (ret) => {
+        try {
+          const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
+            params: { id: String(ret.id) },
+            headers,
+            maxRedirects: 5,
+          });
+          return detailRes.data?.d?.masterSalesmanId ?? null;
+        } catch (detailErr: any) {
+          logger.error(`Gagal ambil detail retur id=${ret.id}: ${detailErr.message}`);
+          return null;
         }
-      } catch (e: any) {
-        logger.info('DEBUG detail retur ERROR: ' + (e.response?.data ? JSON.stringify(e.response.data) : e.message));
-      }
-    }
+      })
+    );
 
-    const rows = returns.map((ret) => ({
-      id: ret.id,
-      nomor: ret.number,
-      id_pelanggan: ret.customer?.customerNo || '',
-      nama_pelanggan: ret.customer?.name || '',
-      id_karyawan_penjual_utama: ret.salesman?.number || '',
-      tanggal: ret.transDate ? parseAccurateDate(ret.transDate).toISOString() : null,
-      total: ret.totalAmount || 0,
-      pembayaran_faktur_penjualan: ret.totalAmount || 0,
-      nilai_retur_faktur: ret.totalAmount || 0,
-    }));
+    const uniqueSalesmanIds = Array.from(new Set(masterSalesmanIds.filter((id): id is number => id != null)));
+    const salesmanById = new Map<number, { number: string; name: string }>();
+    await Promise.all(
+      uniqueSalesmanIds.map(async (id) => {
+        try {
+          const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
+            params: { id: String(id) },
+            headers,
+            maxRedirects: 5,
+          });
+          const emp = empRes.data?.d;
+          if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+        } catch (empErr: any) {
+          logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
+        }
+      })
+    );
+
+    const rows = returns.map((ret, i) => {
+      const salesman = masterSalesmanIds[i] != null ? salesmanById.get(masterSalesmanIds[i]) : undefined;
+      return {
+        id: ret.id,
+        nomor: ret.number,
+        id_pelanggan: ret.customer?.customerNo || '',
+        nama_pelanggan: ret.customer?.name || '',
+        id_karyawan_penjual_utama: salesman?.number || '',
+        tanggal: ret.transDate ? parseAccurateDate(ret.transDate).toISOString() : null,
+        total: ret.totalAmount || 0,
+        pembayaran_faktur_penjualan: ret.totalAmount || 0,
+        nilai_retur_faktur: ret.totalAmount || 0,
+      };
+    });
 
     return res.status(200).json({
       data: rows,
