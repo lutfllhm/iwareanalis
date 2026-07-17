@@ -132,7 +132,9 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
     // /sales-invoice/list.do tidak mengembalikan detailList terisi — perlu
     // panggil endpoint detail per invoice untuk mendapatkan rincian barangnya.
-    let loggedSample = false;
+    // Salesman tidak tersedia sebagai objek di level invoice/list — per baris item
+    // hanya ada ID mentah "salesman1Id", yang harus dicocokkan ke array "salesmanList"
+    // (lookup karyawan) yang disertakan pada baris item yang sama.
     const detailResults = await Promise.all(
       invoiceSummaries.map(async (inv) => {
         try {
@@ -141,14 +143,6 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
             headers,
             maxRedirects: 5,
           });
-          if (!loggedSample) {
-            loggedSample = true;
-            const d = detailRes.data?.d || {};
-            const firstItem = (d.detailItem || d.detailList || [])[0];
-            logger.info('DEBUG rincian item field=' + JSON.stringify(firstItem?.item));
-            logger.info('DEBUG rincian salesmanList=' + JSON.stringify(firstItem?.salesmanList));
-            logger.info('DEBUG rincian salesmanId=' + firstItem?.salesmanId + ' salesman1Id=' + firstItem?.salesman1Id);
-          }
           return { ...inv, detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [] };
         } catch (detailErr: any) {
           logger.error(`Gagal ambil detail invoice id=${inv.id}: ${detailErr.message}`);
@@ -163,10 +157,37 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       invoices = invoices.filter((inv) => inv.branch?.id != null && branchIds.includes(String(inv.branch.id)));
     }
 
+    // item/list.do (bukan detail invoice) yang menyediakan objek itemCategory
+    // lengkap — detailItem transaksi hanya punya itemCategoryId mentah. Ambil
+    // kategori untuk semua kode barang unik yang muncul di halaman ini sekaligus.
+    const kodeBarangUnik = Array.from(new Set(
+      invoices.flatMap((inv) => (inv.detailList || []).map((line: any) => line.item?.no || line.itemNo).filter(Boolean))
+    ));
+    const kategoriByKode = new Map<string, string>();
+    await Promise.all(
+      kodeBarangUnik.map(async (kode) => {
+        try {
+          const itemRes = await axios.get(`${host}/accurate/api/item/list.do`, {
+            params: { fields: 'no,itemCategory', keywords: kode, pageSize: '5' },
+            headers,
+            maxRedirects: 5,
+          });
+          const match = (itemRes.data?.d || []).find((it: any) => it.no === kode);
+          if (match?.itemCategory?.name) kategoriByKode.set(kode, match.itemCategory.name);
+        } catch (itemErr: any) {
+          logger.error(`Gagal ambil kategori barang kode=${kode}: ${itemErr.message}`);
+        }
+      })
+    );
+
     for (const inv of invoices) {
       for (const line of (inv.detailList || [])) {
         const namaBarang = line.item?.name  || line.itemName || '';
         const kodeBarang = line.item?.no    || line.itemNo   || '';
+
+        // Salesman per baris item: hanya ID mentah "salesman1Id" tersedia;
+        // dicocokkan ke array lookup "salesmanList" pada baris item yang sama.
+        const salesmanEntry = (line.salesmanList || []).find((s: any) => s.id === line.salesman1Id);
 
         if (q) {
           const s = q.toLowerCase();
@@ -175,7 +196,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
             kodeBarang.toLowerCase().includes(s) ||
             (inv.number         || '').toLowerCase().includes(s) ||
             (inv.customer?.name || '').toLowerCase().includes(s) ||
-            (inv.salesman?.name || '').toLowerCase().includes(s);
+            (salesmanEntry?.name || '').toLowerCase().includes(s);
           if (!hit) continue;
         }
 
@@ -189,9 +210,9 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           tanggal:        inv.transDate ? parseAccurateDate(inv.transDate).toISOString() : null,
           kodeBarang,
           namaBarang,
-          kategoriBarang: line.item?.itemCategory?.name || '',
+          kategoriBarang: kategoriByKode.get(kodeBarang) || '',
           namaCustomer:   inv.customer?.name || '',
-          namaSalesman:   inv.salesman?.name || '',
+          namaSalesman:   salesmanEntry?.name || '',
           namaCabang:     inv.branch?.name || '',
           kuantitas,
           satuan:         line.unit?.name || line.unitName || 'Unit',
