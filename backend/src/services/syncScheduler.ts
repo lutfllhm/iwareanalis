@@ -6,18 +6,37 @@ let syncJob: cron.ScheduledTask | null = null;
 let syncInProgress = false;
 
 /**
+ * Shared lock between scheduled sync and manual "Sync Now" triggers. Both
+ * paths call the same Accurate API under a shared rate limit, so they must
+ * not run concurrently — overlapping runs previously caused a flood of
+ * requests that tripped Accurate's HTTP 429 rate limiting mid-sync.
+ */
+export function isSyncInProgress(): boolean {
+  return syncInProgress;
+}
+
+export function acquireSyncLock(): boolean {
+  if (syncInProgress) return false;
+  syncInProgress = true;
+  return true;
+}
+
+export function releaseSyncLock(): void {
+  syncInProgress = false;
+}
+
+/**
  * Execute sync for all Accurate modules sequentially
  */
 export async function executeAllSyncs(): Promise<void> {
   // With very short intervals (e.g. every 30s), a sync cycle over a large
   // dataset can outlast the interval itself. Skip overlapping runs instead of
   // stacking parallel calls against the Accurate API.
-  if (syncInProgress) {
+  if (!acquireSyncLock()) {
     logger.warn('Skipping scheduled sync: previous cycle is still running.');
     return;
   }
 
-  syncInProgress = true;
   logger.info('Background scheduled sync started.');
   const modules = ['Barang & Jasa', 'Pelanggan', 'Faktur Penjualan', 'Retur Penjualan'];
 
@@ -36,7 +55,7 @@ export async function executeAllSyncs(): Promise<void> {
     }
     logger.info('Background scheduled sync completed.');
   } finally {
-    syncInProgress = false;
+    releaseSyncLock();
   }
 }
 

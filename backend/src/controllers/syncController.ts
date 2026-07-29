@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { AccurateService } from '../services/accurateService';
-import { startSyncScheduler } from '../services/syncScheduler';
+import { startSyncScheduler, acquireSyncLock, releaseSyncLock } from '../services/syncScheduler';
 import prisma from '../services/db';
 import logger from '../services/logger';
 
@@ -15,9 +15,18 @@ export async function syncModule(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ message: 'Nama modul wajib diisi' });
   }
 
+  // Manual sync and scheduled sync share the same Accurate rate limit, so
+  // they must not run concurrently — overlapping runs previously flooded
+  // Accurate with requests and tripped its HTTP 429 rate limiting mid-sync.
+  if (!acquireSyncLock()) {
+    return res.status(409).json({
+      message: 'Sinkronisasi lain sedang berjalan (terjadwal atau manual). Silakan coba lagi sebentar.',
+    });
+  }
+
   try {
     logger.info(`Manual sync triggered by ${req.user?.email} for: ${moduleName}`);
-    
+
     // Audit log sync request
     await prisma.auditLog.create({
       data: {
@@ -48,6 +57,8 @@ export async function syncModule(req: AuthenticatedRequest, res: Response) {
   } catch (error: any) {
     logger.error(`Sync handler error for ${moduleName}:`, error);
     return res.status(500).json({ message: 'Terjadi kesalahan sistem saat sinkronisasi' });
+  } finally {
+    releaseSyncLock();
   }
 }
 

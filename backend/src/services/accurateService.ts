@@ -45,6 +45,46 @@ function getSyncDateRange(fullHistory: boolean): { startDate: string; endDate: s
   return { startDate: formatAccurateDate(start), endDate: formatAccurateDate(end) };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Accurate Online menerapkan rate limit dan membalas HTTP 429 saat dilewati.
+// Panggilan detail per baris (detail.do, employee/detail.do, item/list.do)
+// dilakukan sequentially dengan jeda kecil (throttleAccurateCall) dan retry
+// dengan backoff di sini supaya sync besar tidak gagal total saat kena 429.
+const ACCURATE_CALL_DELAY_MS = 250;
+const ACCURATE_MAX_RETRIES = 4;
+
+async function axiosGetWithRetry<T = any>(url: string, options: Record<string, any>): Promise<{ data: T }> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await axios.get(url, options);
+    } catch (err: any) {
+      const status = err.response?.status;
+      attempt++;
+      if (status !== 429 || attempt > ACCURATE_MAX_RETRIES) {
+        throw err;
+      }
+      const backoffMs = ACCURATE_CALL_DELAY_MS * 2 ** attempt;
+      logger.warn(`Accurate rate limit (429) on ${url}, retry ${attempt}/${ACCURATE_MAX_RETRIES} after ${backoffMs}ms`);
+      await sleep(backoffMs);
+    }
+  }
+}
+
+// Jalankan `fn` sequentially untuk tiap item dengan jeda tetap di antaranya,
+// untuk menghindari membanjiri Accurate API dengan request paralel/cepat.
+async function throttledMap<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (const item of items) {
+    results.push(await fn(item));
+    await sleep(ACCURATE_CALL_DELAY_MS);
+  }
+  return results;
+}
+
 /**
  * Tarik semua halaman dari endpoint Accurate `list.do` yang mendukung
  * paginasi (`sp.pageCount`), memanggil `onPage` untuk tiap baris yang didapat.
@@ -61,14 +101,27 @@ async function fetchAllAccuratePages(
   let totalRows = 0;
 
   while (true) {
-    const response = await axios.post(
-      url,
-      new URLSearchParams({ ...baseParams, page: String(page), pageSize: '100' }).toString(),
-      {
-        headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-        maxRedirects: 5,
+    const response = await (async () => {
+      let attempt = 0;
+      while (true) {
+        try {
+          return await axios.post(
+            url,
+            new URLSearchParams({ ...baseParams, page: String(page), pageSize: '100' }).toString(),
+            {
+              headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+              maxRedirects: 5,
+            }
+          );
+        } catch (err: any) {
+          attempt++;
+          if (err.response?.status !== 429 || attempt > ACCURATE_MAX_RETRIES) throw err;
+          const backoffMs = ACCURATE_CALL_DELAY_MS * 2 ** attempt;
+          logger.warn(`Accurate rate limit (429) on ${url} page=${page}, retry ${attempt}/${ACCURATE_MAX_RETRIES} after ${backoffMs}ms`);
+          await sleep(backoffMs);
+        }
       }
-    );
+    })();
 
     if (!response.data || !response.data.d) {
       throw new Error(response.data?.message || 'No data returned from Accurate');
@@ -81,6 +134,7 @@ async function fetchAllAccuratePages(
     const pageCount = response.data.sp?.pageCount || 1;
     if (page >= pageCount || rows.length === 0) break;
     page++;
+    await sleep(ACCURATE_CALL_DELAY_MS);
   }
 
   return totalRows;
@@ -463,6 +517,10 @@ export class AccurateService {
       },
       async (invoices) => {
         for (const inv of invoices) {
+          if (!inv.number || !inv.transDate) {
+            logger.warn(`Lewati baris invoice tidak lengkap dari Accurate (id=${inv.id}): number/transDate kosong.`);
+            continue;
+          }
           const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
 
           // 1. Ensure customer exists to satisfy foreign key constraints
@@ -481,9 +539,11 @@ export class AccurateService {
           // Salesman juga tidak tersedia sebagai objek di level invoice/list — per
           // baris item hanya ada ID mentah "salesman1Id", dicocokkan ke array
           // "salesmanList" (lookup karyawan) yang disertakan pada baris item yang sama.
+          // Panggilan ini di-throttle (jeda + retry pada 429) agar tidak
+          // membanjiri rate limit Accurate saat memproses banyak invoice.
           let detailItems: any[] = [];
           try {
-            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+            const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/detail.do`, {
               params: { id: inv.id },
               headers,
               maxRedirects: 5,
@@ -492,6 +552,7 @@ export class AccurateService {
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
+          await sleep(ACCURATE_CALL_DELAY_MS);
 
           const firstSalesmanEntry = (detailItems[0]?.salesmanList || []).find(
             (s: any) => s.id === detailItems[0]?.salesman1Id
@@ -743,42 +804,45 @@ export class AccurateService {
         endDate,
       },
       async (returns) => {
-        const masterSalesmanIds = await Promise.all(
-          returns.map(async (ret) => {
-            try {
-              const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
-                params: { id: String(ret.id) },
-                headers,
-                maxRedirects: 5,
-              });
-              return detailRes.data?.d?.masterSalesmanId ?? null;
-            } catch (detailErr: any) {
-              logger.error(`Gagal ambil detail retur id=${ret.id} saat sync: ${detailErr.message}`);
-              return null;
-            }
-          })
-        );
+        // Panggilan detail/employee di-throttle sequentially (jeda + retry pada
+        // 429) alih-alih Promise.all paralel, agar tidak membanjiri rate limit
+        // Accurate saat memproses banyak retur sekaligus.
+        const masterSalesmanIds = await throttledMap(returns, async (ret) => {
+          try {
+            const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-return/detail.do`, {
+              params: { id: String(ret.id) },
+              headers,
+              maxRedirects: 5,
+            });
+            return detailRes.data?.d?.masterSalesmanId ?? null;
+          } catch (detailErr: any) {
+            logger.error(`Gagal ambil detail retur id=${ret.id} saat sync: ${detailErr.message}`);
+            return null;
+          }
+        });
 
         const uniqueSalesmanIds = Array.from(new Set(masterSalesmanIds.filter((id): id is number => id != null)));
         const salesmanById = new Map<number, { number: string; name: string }>();
-        await Promise.all(
-          uniqueSalesmanIds.map(async (id) => {
-            try {
-              const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
-                params: { id: String(id) },
-                headers,
-                maxRedirects: 5,
-              });
-              const emp = empRes.data?.d;
-              if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
-            } catch (empErr: any) {
-              logger.error(`Gagal ambil employee id=${id} saat sync: ${empErr.message}`);
-            }
-          })
-        );
+        await throttledMap(uniqueSalesmanIds, async (id) => {
+          try {
+            const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
+              params: { id: String(id) },
+              headers,
+              maxRedirects: 5,
+            });
+            const emp = empRes.data?.d;
+            if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+          } catch (empErr: any) {
+            logger.error(`Gagal ambil employee id=${id} saat sync: ${empErr.message}`);
+          }
+        });
 
         for (let i = 0; i < returns.length; i++) {
           const ret = returns[i];
+          if (!ret.number || !ret.transDate) {
+            logger.warn(`Lewati baris retur tidak lengkap dari Accurate (id=${ret.id}): number/transDate kosong.`);
+            continue;
+          }
           const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
           const salesman = masterSalesmanIds[i] != null ? salesmanById.get(masterSalesmanIds[i]) : undefined;
           const salesId = salesman?.number || 'SALES-UNKNOWN';
@@ -848,9 +912,14 @@ export class AccurateService {
       },
       async (invoices) => {
         for (const inv of invoices) {
+          if (!inv.number || !inv.transDate) {
+            logger.warn(`Lewati baris invoice tidak lengkap dari Accurate (id=${inv.id}): number/transDate kosong.`);
+            continue;
+          }
+
           let detailItems: any[] = [];
           try {
-            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+            const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/detail.do`, {
               params: { id: inv.id },
               headers,
               maxRedirects: 5,
@@ -859,6 +928,7 @@ export class AccurateService {
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
+          await sleep(ACCURATE_CALL_DELAY_MS);
 
           // Hapus rincian lama invoice ini agar tidak duplikat dengan sync sebelumnya
           await prisma.rincianPenjualanBarang.deleteMany({
