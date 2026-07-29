@@ -464,8 +464,6 @@ export class AccurateService {
       async (invoices) => {
         for (const inv of invoices) {
           const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
-          const salesId = inv.salesman?.number || 'SALES-UNKNOWN';
-          const salesName = inv.salesman?.name || 'General Sales';
 
           // 1. Ensure customer exists to satisfy foreign key constraints
           await prisma.pelanggan.upsert({
@@ -477,6 +475,28 @@ export class AccurateService {
               synced_at: new Date(),
             },
           });
+
+          // 3. sales-invoice/list.do tidak pernah mengembalikan detailList terisi
+          // (walau field diminta) — barisnya harus diambil lewat detail.do per invoice.
+          // Salesman juga tidak tersedia sebagai objek di level invoice/list — per
+          // baris item hanya ada ID mentah "salesman1Id", dicocokkan ke array
+          // "salesmanList" (lookup karyawan) yang disertakan pada baris item yang sama.
+          let detailItems: any[] = [];
+          try {
+            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+              params: { id: inv.id },
+              headers,
+              maxRedirects: 5,
+            });
+            detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
+          } catch (detailErr: any) {
+            logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
+          }
+
+          const firstSalesmanEntry = (detailItems[0]?.salesmanList || []).find(
+            (s: any) => s.id === detailItems[0]?.salesman1Id
+          );
+          const salesId = firstSalesmanEntry?.number || firstSalesmanEntry?.id?.toString() || 'SALES-UNKNOWN';
 
           // 2. Create/Update Invoice
           await prisma.fakturPenjualan.upsert({
@@ -505,23 +525,12 @@ export class AccurateService {
             where: { nomor: inv.number },
           });
 
-          // 3. sales-invoice/list.do tidak pernah mengembalikan detailList terisi
-          // (walau field diminta) — barisnya harus diambil lewat detail.do per invoice.
-          let detailItems: any[] = [];
-          try {
-            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
-              params: { id: inv.id },
-              headers,
-              maxRedirects: 5,
-            });
-            detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
-          } catch (detailErr: any) {
-            logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
-          }
-
           for (const line of detailItems) {
             const itemNo = line.item?.no || 'BRG-UNKNOWN';
             const itemName = line.item?.name || 'Barang Hilang';
+            const lineSalesmanEntry = (line.salesmanList || []).find((s: any) => s.id === line.salesman1Id);
+            const lineSalesId = lineSalesmanEntry?.number || lineSalesmanEntry?.id?.toString() || 'SALES-UNKNOWN';
+            const lineSalesName = lineSalesmanEntry?.name || 'General Sales';
 
             // Ensure item master exists for FK constraint
             await prisma.barangJasa.upsert({
@@ -549,8 +558,8 @@ export class AccurateService {
                 penjualan: (line.quantity || 0) * (line.unitPrice || 0),
                 tanggal: parseAccurateDate(inv.transDate),
                 nama_pelanggan: inv.customer?.name || 'Pelanggan Baru',
-                nama_tenaga_penjual: salesName,
-                id_karyawan_tenaga_penjual: salesId,
+                nama_tenaga_penjual: lineSalesName,
+                id_karyawan_tenaga_penjual: lineSalesId,
                 synced_at: new Date(),
               },
             });
@@ -718,6 +727,10 @@ export class AccurateService {
 
   private static async pullReturPenjualan(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
     // API endpoint: POST /api/sales-return/list.do
+    // sales-return/list.do tidak menyertakan objek "salesman" seperti sales-invoice.
+    // Satu-satunya cara mendapatkan tenaga penjual adalah lewat sales-return/detail.do
+    // (field "masterSalesmanId", hanya ID numerik internal), lalu resolve ID tersebut
+    // ke kode karyawan via employee/detail.do.
     const { startDate, endDate } = getSyncDateRange(fullHistory);
     let count = 0;
 
@@ -725,14 +738,50 @@ export class AccurateService {
       `${host}/accurate/api/sales-return/list.do`,
       headers,
       {
-        fields: 'number,transDate,customer,totalAmount,salesman',
+        fields: 'id,number,transDate,customer,totalAmount',
         startDate,
         endDate,
       },
       async (returns) => {
-        for (const ret of returns) {
+        const masterSalesmanIds = await Promise.all(
+          returns.map(async (ret) => {
+            try {
+              const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
+                params: { id: String(ret.id) },
+                headers,
+                maxRedirects: 5,
+              });
+              return detailRes.data?.d?.masterSalesmanId ?? null;
+            } catch (detailErr: any) {
+              logger.error(`Gagal ambil detail retur id=${ret.id} saat sync: ${detailErr.message}`);
+              return null;
+            }
+          })
+        );
+
+        const uniqueSalesmanIds = Array.from(new Set(masterSalesmanIds.filter((id): id is number => id != null)));
+        const salesmanById = new Map<number, { number: string; name: string }>();
+        await Promise.all(
+          uniqueSalesmanIds.map(async (id) => {
+            try {
+              const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
+                params: { id: String(id) },
+                headers,
+                maxRedirects: 5,
+              });
+              const emp = empRes.data?.d;
+              if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+            } catch (empErr: any) {
+              logger.error(`Gagal ambil employee id=${id} saat sync: ${empErr.message}`);
+            }
+          })
+        );
+
+        for (let i = 0; i < returns.length; i++) {
+          const ret = returns[i];
           const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
-          const salesId = ret.salesman?.number || 'SALES-UNKNOWN';
+          const salesman = masterSalesmanIds[i] != null ? salesmanById.get(masterSalesmanIds[i]) : undefined;
+          const salesId = salesman?.number || 'SALES-UNKNOWN';
 
           // Ensure customer exists for FK constraint
           await prisma.pelanggan.upsert({
@@ -781,8 +830,9 @@ export class AccurateService {
    * Accurate tidak menyediakan endpoint /api/report/get-sales-per-item.do —
    * endpoint tersebut tidak ada di Daftar API resmi Accurate Online
    * (account.accurate.id/developer/api-docs.do). Data rincian penjualan per
-   * barang diturunkan dari detailList milik /api/sales-invoice/list.do,
-   * sama seperti pendekatan pullFakturPenjualan dan reportController.ts.
+   * barang diturunkan dari detail.do per invoice, sama seperti pendekatan
+   * pullFakturPenjualan dan reportController.ts — sales-invoice/list.do tidak
+   * pernah mengembalikan detailList/salesman terisi walau field diminta.
    */
   private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
     const { startDate, endDate } = getSyncDateRange(fullHistory);
@@ -792,15 +842,33 @@ export class AccurateService {
       `${host}/accurate/api/sales-invoice/list.do`,
       headers,
       {
-        fields: 'number,transDate,customer,salesman,detailList',
+        fields: 'id,number,transDate,customer',
         startDate,
         endDate,
       },
       async (invoices) => {
         for (const inv of invoices) {
-          for (const line of (inv.detailList || [])) {
+          let detailItems: any[] = [];
+          try {
+            const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
+              params: { id: inv.id },
+              headers,
+              maxRedirects: 5,
+            });
+            detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
+          } catch (detailErr: any) {
+            logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
+          }
+
+          // Hapus rincian lama invoice ini agar tidak duplikat dengan sync sebelumnya
+          await prisma.rincianPenjualanBarang.deleteMany({
+            where: { nomor: inv.number },
+          });
+
+          for (const line of detailItems) {
             const itemNo = line.item?.no || 'BRG-UNKNOWN';
             const itemName = line.item?.name || 'Barang Tidak Diketahui';
+            const salesmanEntry = (line.salesmanList || []).find((s: any) => s.id === line.salesman1Id);
 
             // Pastikan barang ada di master
             await prisma.barangJasa.upsert({
@@ -831,8 +899,8 @@ export class AccurateService {
                 penjualan: line.amount || (kuantitas * hargaSatuan),
                 tanggal: parseAccurateDate(inv.transDate),
                 nama_pelanggan: inv.customer?.name || 'Umum',
-                nama_tenaga_penjual: inv.salesman?.name || 'General',
-                id_karyawan_tenaga_penjual: inv.salesman?.number || 'SALES-UNKNOWN',
+                nama_tenaga_penjual: salesmanEntry?.name || 'General Sales',
+                id_karyawan_tenaga_penjual: salesmanEntry?.number || salesmanEntry?.id?.toString() || 'SALES-UNKNOWN',
                 synced_at: new Date(),
               },
             });
