@@ -85,6 +85,43 @@ async function throttledMap<T, R>(items: T[], fn: (item: T) => Promise<R>): Prom
   return results;
 }
 
+// Cache per-proses (dibersihkan tiap kali sync module dijalankan) untuk hasil
+// resolve employee/detail.do. Satu salesman biasanya muncul di ratusan/ribuan
+// invoice, jadi tanpa cache ini kita memanggil endpoint yang sama berulang
+// kali dan mempercepat kena rate limit (429) dari Accurate.
+const salesmanResolveCache = new Map<number, { number: string; name: string }>();
+
+async function resolveSalesman(
+  host: string,
+  headers: Record<string, string>,
+  masterSalesmanId: number | null
+): Promise<{ salesId: string; salesName: string }> {
+  if (masterSalesmanId == null) {
+    return { salesId: 'SALES-UNKNOWN', salesName: 'General Sales' };
+  }
+
+  const cached = salesmanResolveCache.get(masterSalesmanId);
+  if (cached) {
+    return { salesId: cached.number || 'SALES-UNKNOWN', salesName: cached.name || 'General Sales' };
+  }
+
+  try {
+    const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
+      params: { id: String(masterSalesmanId) },
+      headers,
+      maxRedirects: 5,
+    });
+    const emp = empRes.data?.d;
+    const resolved = { number: emp?.number || '', name: emp?.name || '' };
+    salesmanResolveCache.set(masterSalesmanId, resolved);
+    await sleep(ACCURATE_CALL_DELAY_MS);
+    return { salesId: resolved.number || 'SALES-UNKNOWN', salesName: resolved.name || 'General Sales' };
+  } catch (empErr: any) {
+    logger.error(`Gagal ambil employee id=${masterSalesmanId} saat sync: ${empErr.message}`);
+    return { salesId: 'SALES-UNKNOWN', salesName: 'General Sales' };
+  }
+}
+
 /**
  * Tarik semua halaman dari endpoint Accurate `list.do` yang mendukung
  * paginasi (`sp.pageCount`), memanggil `onPage` untuk tiap baris yang didapat.
@@ -557,25 +594,7 @@ export class AccurateService {
           }
           await sleep(ACCURATE_CALL_DELAY_MS);
 
-          let salesId = 'SALES-UNKNOWN';
-          let salesName = 'General Sales';
-          if (masterSalesmanId != null) {
-            try {
-              const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
-                params: { id: String(masterSalesmanId) },
-                headers,
-                maxRedirects: 5,
-              });
-              const emp = empRes.data?.d;
-              if (emp) {
-                salesId = emp.number || salesId;
-                salesName = emp.name || salesName;
-              }
-            } catch (empErr: any) {
-              logger.error(`Gagal ambil employee id=${masterSalesmanId} saat sync: ${empErr.message}`);
-            }
-            await sleep(ACCURATE_CALL_DELAY_MS);
-          }
+          const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
           // 2. Create/Update Invoice
           await prisma.fakturPenjualan.upsert({
@@ -836,22 +855,6 @@ export class AccurateService {
           }
         });
 
-        const uniqueSalesmanIds = Array.from(new Set(masterSalesmanIds.filter((id): id is number => id != null)));
-        const salesmanById = new Map<number, { number: string; name: string }>();
-        await throttledMap(uniqueSalesmanIds, async (id) => {
-          try {
-            const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
-              params: { id: String(id) },
-              headers,
-              maxRedirects: 5,
-            });
-            const emp = empRes.data?.d;
-            if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
-          } catch (empErr: any) {
-            logger.error(`Gagal ambil employee id=${id} saat sync: ${empErr.message}`);
-          }
-        });
-
         for (let i = 0; i < returns.length; i++) {
           const ret = returns[i];
           if (!ret.number || !ret.transDate) {
@@ -859,8 +862,7 @@ export class AccurateService {
             continue;
           }
           const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
-          const salesman = masterSalesmanIds[i] != null ? salesmanById.get(masterSalesmanIds[i]) : undefined;
-          const salesId = salesman?.number || 'SALES-UNKNOWN';
+          const { salesId } = await resolveSalesman(host, headers, masterSalesmanIds[i]);
 
           // Ensure customer exists for FK constraint
           await prisma.pelanggan.upsert({
@@ -951,25 +953,7 @@ export class AccurateService {
           }
           await sleep(ACCURATE_CALL_DELAY_MS);
 
-          let salesId = 'SALES-UNKNOWN';
-          let salesName = 'General Sales';
-          if (masterSalesmanId != null) {
-            try {
-              const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
-                params: { id: String(masterSalesmanId) },
-                headers,
-                maxRedirects: 5,
-              });
-              const emp = empRes.data?.d;
-              if (emp) {
-                salesId = emp.number || salesId;
-                salesName = emp.name || salesName;
-              }
-            } catch (empErr: any) {
-              logger.error(`Gagal ambil employee id=${masterSalesmanId} saat sync: ${empErr.message}`);
-            }
-            await sleep(ACCURATE_CALL_DELAY_MS);
-          }
+          const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
           // Hapus rincian lama invoice ini agar tidak duplikat dengan sync sebelumnya
           await prisma.rincianPenjualanBarang.deleteMany({
