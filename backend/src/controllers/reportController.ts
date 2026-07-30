@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
-import { AccurateService, parseAccurateDate } from '../services/accurateService';
+import { AccurateService, parseAccurateDate, axiosGetWithRetry, throttledMap } from '../services/accurateService';
 import { config } from '../config';
 import prisma from '../services/db';
 import logger from '../services/logger';
@@ -136,25 +136,23 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     // item — hanya ada ID mentah "masterSalesmanId" di level invoice, yang harus
     // di-resolve ke kode/nama karyawan lewat employee/detail.do (sama seperti
     // pullFakturPenjualan/pullReturPenjualan di accurateService.ts).
-    const detailResults = await Promise.all(
-      invoiceSummaries.map(async (inv) => {
-        try {
-          const detailRes = await axios.get(`${host}/accurate/api/sales-invoice/detail.do`, {
-            params: { id: inv.id },
-            headers,
-            maxRedirects: 5,
-          });
-          return {
-            ...inv,
-            detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [],
-            masterSalesmanId: detailRes.data?.d?.masterSalesmanId ?? null,
-          };
-        } catch (detailErr: any) {
-          logger.error(`Gagal ambil detail invoice id=${inv.id}: ${detailErr.message}`);
-          return { ...inv, detailList: [], masterSalesmanId: null };
-        }
-      })
-    );
+    const detailResults = await throttledMap(invoiceSummaries, async (inv) => {
+      try {
+        const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/detail.do`, {
+          params: { id: inv.id },
+          headers,
+          maxRedirects: 5,
+        });
+        return {
+          ...inv,
+          detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [],
+          masterSalesmanId: detailRes.data?.d?.masterSalesmanId ?? null,
+        };
+      } catch (detailErr: any) {
+        logger.error(`Gagal ambil detail invoice id=${inv.id}: ${detailErr.message}`);
+        return { ...inv, detailList: [], masterSalesmanId: null };
+      }
+    });
 
     let invoices = detailResults;
 
@@ -166,21 +164,19 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       invoices.map((inv) => inv.masterSalesmanId).filter((id): id is number => id != null)
     ));
     const salesmanById = new Map<number, { number: string; name: string }>();
-    await Promise.all(
-      uniqueSalesmanIds.map(async (id) => {
-        try {
-          const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
-            params: { id: String(id) },
-            headers,
-            maxRedirects: 5,
-          });
-          const emp = empRes.data?.d;
-          if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
-        } catch (empErr: any) {
-          logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
-        }
-      })
-    );
+    await throttledMap(uniqueSalesmanIds, async (id) => {
+      try {
+        const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
+          params: { id: String(id) },
+          headers,
+          maxRedirects: 5,
+        });
+        const emp = empRes.data?.d;
+        if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+      } catch (empErr: any) {
+        logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
+      }
+    });
 
     // item/list.do (bukan detail invoice) yang menyediakan objek itemCategory
     // lengkap — detailItem transaksi hanya punya itemCategoryId mentah. Ambil
@@ -189,21 +185,19 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       invoices.flatMap((inv) => (inv.detailList || []).map((line: any) => line.item?.no || line.itemNo).filter(Boolean))
     ));
     const kategoriByKode = new Map<string, string>();
-    await Promise.all(
-      kodeBarangUnik.map(async (kode) => {
-        try {
-          const itemRes = await axios.get(`${host}/accurate/api/item/list.do`, {
-            params: { fields: 'no,itemCategory', keywords: kode, pageSize: '5' },
-            headers,
-            maxRedirects: 5,
-          });
-          const match = (itemRes.data?.d || []).find((it: any) => it.no === kode);
-          if (match?.itemCategory?.name) kategoriByKode.set(kode, match.itemCategory.name);
-        } catch (itemErr: any) {
-          logger.error(`Gagal ambil kategori barang kode=${kode}: ${itemErr.message}`);
-        }
-      })
-    );
+    await throttledMap(kodeBarangUnik, async (kode) => {
+      try {
+        const itemRes = await axiosGetWithRetry(`${host}/accurate/api/item/list.do`, {
+          params: { fields: 'no,itemCategory', keywords: kode, pageSize: '5' },
+          headers,
+          maxRedirects: 5,
+        });
+        const match = (itemRes.data?.d || []).find((it: any) => it.no === kode);
+        if (match?.itemCategory?.name) kategoriByKode.set(kode, match.itemCategory.name);
+      } catch (itemErr: any) {
+        logger.error(`Gagal ambil kategori barang kode=${kode}: ${itemErr.message}`);
+      }
+    });
 
     for (const inv of invoices) {
       // Salesman disimpan per-invoice (masterSalesmanId), bukan per baris item —
@@ -470,39 +464,35 @@ export async function getDaftarReturPenjualan(req: AuthenticatedRequest, res: Re
     // Satu-satunya cara mendapatkan tenaga penjual adalah lewat sales-return/detail.do
     // (field "masterSalesmanId", hanya ID numerik internal), lalu resolve ID tersebut
     // ke kode karyawan (mis. "E.00038") via employee/detail.do.
-    const masterSalesmanIds = await Promise.all(
-      returns.map(async (ret) => {
-        try {
-          const detailRes = await axios.get(`${host}/accurate/api/sales-return/detail.do`, {
-            params: { id: String(ret.id) },
-            headers,
-            maxRedirects: 5,
-          });
-          return detailRes.data?.d?.masterSalesmanId ?? null;
-        } catch (detailErr: any) {
-          logger.error(`Gagal ambil detail retur id=${ret.id}: ${detailErr.message}`);
-          return null;
-        }
-      })
-    );
+    const masterSalesmanIds = await throttledMap(returns, async (ret) => {
+      try {
+        const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-return/detail.do`, {
+          params: { id: String(ret.id) },
+          headers,
+          maxRedirects: 5,
+        });
+        return detailRes.data?.d?.masterSalesmanId ?? null;
+      } catch (detailErr: any) {
+        logger.error(`Gagal ambil detail retur id=${ret.id}: ${detailErr.message}`);
+        return null;
+      }
+    });
 
     const uniqueSalesmanIds = Array.from(new Set(masterSalesmanIds.filter((id): id is number => id != null)));
     const salesmanById = new Map<number, { number: string; name: string }>();
-    await Promise.all(
-      uniqueSalesmanIds.map(async (id) => {
-        try {
-          const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
-            params: { id: String(id) },
-            headers,
-            maxRedirects: 5,
-          });
-          const emp = empRes.data?.d;
-          if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
-        } catch (empErr: any) {
-          logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
-        }
-      })
-    );
+    await throttledMap(uniqueSalesmanIds, async (id) => {
+      try {
+        const empRes = await axiosGetWithRetry(`${host}/accurate/api/employee/detail.do`, {
+          params: { id: String(id) },
+          headers,
+          maxRedirects: 5,
+        });
+        const emp = empRes.data?.d;
+        if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+      } catch (empErr: any) {
+        logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
+      }
+    });
 
     const rows = returns.map((ret, i) => {
       const salesman = masterSalesmanIds[i] != null ? salesmanById.get(masterSalesmanIds[i]) : undefined;
@@ -684,26 +674,24 @@ export async function getDaftarPelanggan(req: AuthenticatedRequest, res: Respons
     // "Penjualan" pada form Accurate) — field itu hanya tersedia lewat
     // customer/detail.do per pelanggan, sama seperti pola detail invoice di
     // getRincianPenjualanPerBarang di atas.
-    const customers = await Promise.all(
-      customerSummaries.map(async (cust) => {
-        try {
-          const detailRes = await axios.get(`${host}/accurate/api/customer/detail.do`, {
-            params: { id: cust.id },
-            headers,
-            maxRedirects: 5,
-          });
-          const detail = detailRes.data?.d || {};
-          // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
-          // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
-          // salesman) hanya tersedia di customer/detail.do, jadi detail dijadikan
-          // sumber utama dan ringkasan list sebagai fallback saja.
-          return { ...cust, ...detail };
-        } catch (detailErr: any) {
-          logger.error(`Gagal ambil detail pelanggan id=${cust.id}: ${detailErr.message}`);
-          return cust;
-        }
-      })
-    );
+    const customers = await throttledMap(customerSummaries, async (cust) => {
+      try {
+        const detailRes = await axiosGetWithRetry(`${host}/accurate/api/customer/detail.do`, {
+          params: { id: cust.id },
+          headers,
+          maxRedirects: 5,
+        });
+        const detail = detailRes.data?.d || {};
+        // customer/list.do hanya mengembalikan ringkasan minim (id, name, customerNo);
+        // hampir seluruh field lain (kategori, alamat pengiriman, tanggal dibuat,
+        // salesman) hanya tersedia di customer/detail.do, jadi detail dijadikan
+        // sumber utama dan ringkasan list sebagai fallback saja.
+        return { ...cust, ...detail };
+      } catch (detailErr: any) {
+        logger.error(`Gagal ambil detail pelanggan id=${cust.id}: ${detailErr.message}`);
+        return cust;
+      }
+    });
 
     const rows = customers.map((cust) => {
       // Tenaga penjual kedua hanya tersedia sebagai ID mentah "salesman2Id" (null

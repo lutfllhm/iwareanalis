@@ -56,7 +56,7 @@ function sleep(ms: number): Promise<void> {
 const ACCURATE_CALL_DELAY_MS = 250;
 const ACCURATE_MAX_RETRIES = 4;
 
-async function axiosGetWithRetry<T = any>(url: string, options: Record<string, any>): Promise<{ data: T }> {
+export async function axiosGetWithRetry<T = any>(url: string, options: Record<string, any>): Promise<{ data: T }> {
   let attempt = 0;
   while (true) {
     try {
@@ -76,7 +76,7 @@ async function axiosGetWithRetry<T = any>(url: string, options: Record<string, a
 
 // Jalankan `fn` sequentially untuk tiap item dengan jeda tetap di antaranya,
 // untuk menghindari membanjiri Accurate API dengan request paralel/cepat.
-async function throttledMap<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function throttledMap<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = [];
   for (const item of items) {
     results.push(await fn(item));
