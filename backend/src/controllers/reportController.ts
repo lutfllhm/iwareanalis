@@ -132,9 +132,10 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
 
     // /sales-invoice/list.do tidak mengembalikan detailList terisi — perlu
     // panggil endpoint detail per invoice untuk mendapatkan rincian barangnya.
-    // Salesman tidak tersedia sebagai objek di level invoice/list — per baris item
-    // hanya ada ID mentah "salesman1Id", yang harus dicocokkan ke array "salesmanList"
-    // (lookup karyawan) yang disertakan pada baris item yang sama.
+    // Salesman tidak tersedia sebagai objek di level invoice/list maupun per baris
+    // item — hanya ada ID mentah "masterSalesmanId" di level invoice, yang harus
+    // di-resolve ke kode/nama karyawan lewat employee/detail.do (sama seperti
+    // pullFakturPenjualan/pullReturPenjualan di accurateService.ts).
     const detailResults = await Promise.all(
       invoiceSummaries.map(async (inv) => {
         try {
@@ -143,10 +144,14 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
             headers,
             maxRedirects: 5,
           });
-          return { ...inv, detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [] };
+          return {
+            ...inv,
+            detailList: detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [],
+            masterSalesmanId: detailRes.data?.d?.masterSalesmanId ?? null,
+          };
         } catch (detailErr: any) {
           logger.error(`Gagal ambil detail invoice id=${inv.id}: ${detailErr.message}`);
-          return { ...inv, detailList: [] };
+          return { ...inv, detailList: [], masterSalesmanId: null };
         }
       })
     );
@@ -156,6 +161,26 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     if (branchIds.length > 0) {
       invoices = invoices.filter((inv) => inv.branch?.id != null && branchIds.includes(String(inv.branch.id)));
     }
+
+    const uniqueSalesmanIds = Array.from(new Set(
+      invoices.map((inv) => inv.masterSalesmanId).filter((id): id is number => id != null)
+    ));
+    const salesmanById = new Map<number, { number: string; name: string }>();
+    await Promise.all(
+      uniqueSalesmanIds.map(async (id) => {
+        try {
+          const empRes = await axios.get(`${host}/accurate/api/employee/detail.do`, {
+            params: { id: String(id) },
+            headers,
+            maxRedirects: 5,
+          });
+          const emp = empRes.data?.d;
+          if (emp) salesmanById.set(id, { number: emp.number || '', name: emp.name || '' });
+        } catch (empErr: any) {
+          logger.error(`Gagal ambil employee id=${id}: ${empErr.message}`);
+        }
+      })
+    );
 
     // item/list.do (bukan detail invoice) yang menyediakan objek itemCategory
     // lengkap — detailItem transaksi hanya punya itemCategoryId mentah. Ambil
@@ -181,13 +206,13 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
     );
 
     for (const inv of invoices) {
+      // Salesman disimpan per-invoice (masterSalesmanId), bukan per baris item —
+      // sama untuk semua baris pada invoice yang sama.
+      const salesman = inv.masterSalesmanId != null ? salesmanById.get(inv.masterSalesmanId) : undefined;
+
       for (const line of (inv.detailList || [])) {
         const namaBarang = line.item?.name  || line.itemName || '';
         const kodeBarang = line.item?.no    || line.itemNo   || '';
-
-        // Salesman per baris item: hanya ID mentah "salesman1Id" tersedia;
-        // dicocokkan ke array lookup "salesmanList" pada baris item yang sama.
-        const salesmanEntry = (line.salesmanList || []).find((s: any) => s.id === line.salesman1Id);
 
         if (q) {
           const s = q.toLowerCase();
@@ -196,7 +221,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
             kodeBarang.toLowerCase().includes(s) ||
             (inv.number         || '').toLowerCase().includes(s) ||
             (inv.customer?.name || '').toLowerCase().includes(s) ||
-            (salesmanEntry?.name || '').toLowerCase().includes(s);
+            (salesman?.name || '').toLowerCase().includes(s);
           if (!hit) continue;
         }
 
@@ -212,7 +237,7 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
           namaBarang,
           kategoriBarang: kategoriByKode.get(kodeBarang) || '',
           namaCustomer:   inv.customer?.name || '',
-          namaSalesman:   salesmanEntry?.name || '',
+          namaSalesman:   salesman?.name || '',
           namaCabang:     inv.branch?.name || '',
           kuantitas,
           satuan:         line.unit?.name || line.unitName || 'Unit',
