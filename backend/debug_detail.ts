@@ -13,9 +13,9 @@ async function main() {
   const host = hostSetting?.value || '';
   const headers = await AccurateService.getApiTokenHeaders();
 
-  // Ambil satu invoice terbaru dari list.do
+  // Ambil satu invoice dari list.do
   const listRes = await axios.get(`${host}/accurate/api/sales-invoice/list.do`, {
-    params: { fields: 'id,number,transDate,customer', pageSize: '1', sp: 'transDate|desc' },
+    params: { fields: 'id,number,transDate,customer', pageSize: '1' },
     headers,
     maxRedirects: 5,
   });
