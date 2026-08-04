@@ -95,14 +95,14 @@ async function resolveSalesman(
   host: string,
   headers: Record<string, string>,
   masterSalesmanId: number | null
-): Promise<{ salesId: string; salesName: string }> {
+): Promise<{ salesId: string | null; salesName: string | null }> {
   if (masterSalesmanId == null) {
-    return { salesId: 'SALES-UNKNOWN', salesName: 'General Sales' };
+    return { salesId: null, salesName: null };
   }
 
   const cached = salesmanResolveCache.get(masterSalesmanId);
   if (cached) {
-    return { salesId: cached.number || 'SALES-UNKNOWN', salesName: cached.name || 'General Sales' };
+    return { salesId: cached.number || null, salesName: cached.name || null };
   }
 
   try {
@@ -115,10 +115,10 @@ async function resolveSalesman(
     const resolved = { number: emp?.number || '', name: emp?.name || '' };
     salesmanResolveCache.set(masterSalesmanId, resolved);
     await sleep(ACCURATE_CALL_DELAY_MS);
-    return { salesId: resolved.number || 'SALES-UNKNOWN', salesName: resolved.name || 'General Sales' };
+    return { salesId: resolved.number || null, salesName: resolved.name || null };
   } catch (empErr: any) {
     logger.error(`Gagal ambil employee id=${masterSalesmanId} saat sync: ${empErr.message}`);
-    return { salesId: 'SALES-UNKNOWN', salesName: 'General Sales' };
+    return { salesId: null, salesName: null };
   }
 }
 
