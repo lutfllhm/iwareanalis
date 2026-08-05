@@ -954,6 +954,13 @@ export class AccurateService {
             });
             detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
             masterSalesmanId = detailRes.data?.d?.masterSalesmanId ?? null;
+            // DEBUG SEMENTARA: cetak struktur mentah untuk cari nama field "Penjual" per baris.
+            // Hapus blok ini setelah field yang benar ditemukan.
+            logger.info(`DEBUG detail invoice id=${inv.id} number=${inv.number}: ` + JSON.stringify({
+              masterSalesmanId: detailRes.data?.d?.masterSalesmanId,
+              firstDetailItemKeys: detailItems[0] ? Object.keys(detailItems[0]) : [],
+              firstDetailItemRaw: detailItems[0] || null,
+            }));
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
