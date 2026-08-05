@@ -36,7 +36,7 @@ export default function SettingsPage() {
   const [appKey, setAppKey] = useState('');
   const [signatureSecret, setSignatureSecret] = useState('');
   const [apiToken, setApiToken] = useState('');
-  const [cronInterval, setCronInterval] = useState('*/30 * * * * *');
+  const [cronInterval, setCronInterval] = useState('0 0 * * * *');
   const [connectedDbName, setConnectedDbName] = useState('');
 
   // Password Form Settings
@@ -100,7 +100,7 @@ export default function SettingsPage() {
       setAppKey(settingsData.ACCURATE_APP_KEY || '');
       setSignatureSecret(settingsData.ACCURATE_SIGNATURE_SECRET || '');
       setApiToken(settingsData.ACCURATE_API_TOKEN || '');
-      setCronInterval(settingsData.SYNC_INTERVAL_CRON || '*/30 * * * * *');
+      setCronInterval(settingsData.SYNC_INTERVAL_CRON || '0 0 * * * *');
       setConnectedDbName(settingsData.ACCURATE_DB_NAME || '');
     }
     if (userProfile) {
@@ -432,22 +432,10 @@ export default function SettingsPage() {
                 {/* Preconfigured selector boxes */}
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => setCronInterval('*/30 * * * * *')}
+                    onClick={() => setCronInterval('0 0 * * * *')}
                     className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
                   >
-                    Setiap 30 Detik (Default)
-                  </button>
-                  <button
-                    onClick={() => setCronInterval('0 * * * * *')}
-                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
-                  >
-                    Setiap 1 Menit
-                  </button>
-                  <button
-                    onClick={() => setCronInterval('0 */1 * * *')}
-                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
-                  >
-                    Setiap 1 Jam
+                    Setiap 1 Jam (Default)
                   </button>
                   <button
                     onClick={() => setCronInterval('0 */4 * * *')}
@@ -460,6 +448,13 @@ export default function SettingsPage() {
                     className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
                   >
                     Setiap Tengah Malam
+                  </button>
+                  <button
+                    onClick={() => setCronInterval('0 * * * * *')}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-secondary hover:bg-muted text-xs text-foreground font-semibold"
+                    title="Interval sangat singkat: hanya untuk sync bervolume kecil, berisiko sync saling tumpang tindih pada dataset besar."
+                  >
+                    Setiap 1 Menit
                   </button>
                 </div>
               </div>

@@ -74,14 +74,31 @@ export async function axiosGetWithRetry<T = any>(url: string, options: Record<st
   }
 }
 
-// Jalankan `fn` sequentially untuk tiap item dengan jeda tetap di antaranya,
-// untuk menghindari membanjiri Accurate API dengan request paralel/cepat.
+// Berapa banyak item diproses bersamaan di throttledMap. Accurate belum
+// mendokumentasikan batas rate limit resmi, jadi angka ini dipilih konservatif
+// (naik dari sepenuhnya sequential) — tiap worker tetap diberi jeda
+// ACCURATE_CALL_DELAY_MS antar panggilannya sendiri, dan axiosGetWithRetry
+// tetap menangani 429 dengan backoff bila limit tetap tersentuh.
+const ACCURATE_CONCURRENCY = 5;
+
+// Jalankan `fn` untuk tiap item lewat beberapa worker paralel (dibatasi
+// ACCURATE_CONCURRENCY), masing-masing tetap throttled dengan jeda tetap,
+// untuk mempercepat sync besar tanpa membanjiri Accurate API sekaligus.
 export async function throttledMap<T, R>(items: T[], fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = [];
-  for (const item of items) {
-    results.push(await fn(item));
-    await sleep(ACCURATE_CALL_DELAY_MS);
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i]);
+      await sleep(ACCURATE_CALL_DELAY_MS);
+    }
   }
+
+  const workerCount = Math.min(ACCURATE_CONCURRENCY, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
   return results;
 }
 
@@ -559,10 +576,13 @@ export class AccurateService {
         endDate,
       },
       async (invoices) => {
-        for (const inv of invoices) {
+        // Tiap invoice punya nomor unik dan hanya menulis baris miliknya sendiri
+        // (upsert by nomor, delete+create rincian scoped ke nomor itu), jadi aman
+        // diproses paralel lewat throttledMap — invoice tidak saling tumpang tindih.
+        const perInvoiceCounts = await throttledMap(invoices, async (inv): Promise<number> => {
           if (!inv.number || !inv.transDate) {
             logger.warn(`Lewati baris invoice tidak lengkap dari Accurate (id=${inv.id}): number/transDate kosong.`);
-            continue;
+            return 0;
           }
           const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
 
@@ -598,7 +618,6 @@ export class AccurateService {
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
-          await sleep(ACCURATE_CALL_DELAY_MS);
 
           const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
@@ -665,8 +684,9 @@ export class AccurateService {
               },
             });
           }
-          count++;
-        }
+          return 1;
+        });
+        count += perInvoiceCounts.reduce((sum, c) => sum + c, 0);
       }
     );
 
@@ -844,8 +864,8 @@ export class AccurateService {
         endDate,
       },
       async (returns) => {
-        // Panggilan detail/employee di-throttle sequentially (jeda + retry pada
-        // 429) alih-alih Promise.all paralel, agar tidak membanjiri rate limit
+        // Panggilan detail di-throttle lewat throttledMap (paralel terbatas +
+        // jeda per worker, retry pada 429) agar tidak membanjiri rate limit
         // Accurate saat memproses banyak retur sekaligus.
         const masterSalesmanIds = await throttledMap(returns, async (ret) => {
           try {
@@ -938,10 +958,12 @@ export class AccurateService {
         endDate,
       },
       async (invoices) => {
-        for (const inv of invoices) {
+        // Tiap invoice punya nomor unik dan rincian yang ditulis (delete+create)
+        // discope ke nomor itu saja, jadi aman diproses paralel lewat throttledMap.
+        const perInvoiceCounts = await throttledMap(invoices, async (inv): Promise<number> => {
           if (!inv.number || !inv.transDate) {
             logger.warn(`Lewati baris invoice tidak lengkap dari Accurate (id=${inv.id}): number/transDate kosong.`);
-            continue;
+            return 0;
           }
 
           let detailItems: any[] = [];
@@ -964,7 +986,6 @@ export class AccurateService {
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
-          await sleep(ACCURATE_CALL_DELAY_MS);
 
           const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
@@ -973,6 +994,7 @@ export class AccurateService {
             where: { nomor: inv.number },
           });
 
+          let lineCount = 0;
           for (const line of detailItems) {
             const itemNo = line.item?.no || 'BRG-UNKNOWN';
             const itemName = line.item?.name || 'Barang Tidak Diketahui';
@@ -1011,9 +1033,11 @@ export class AccurateService {
                 synced_at: new Date(),
               },
             });
-            count++;
+            lineCount++;
           }
-        }
+          return lineCount;
+        });
+        count += perInvoiceCounts.reduce((sum, c) => sum + c, 0);
       }
     );
 
