@@ -167,7 +167,7 @@ async function fetchAllAccuratePages(
         try {
           return await axios.post(
             url,
-            new URLSearchParams({ ...baseParams, page: String(page), pageSize: '100' }).toString(),
+            new URLSearchParams({ ...baseParams, 'sp.page': String(page), 'sp.pageSize': '100' }).toString(),
             {
               headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
               maxRedirects: 5,
