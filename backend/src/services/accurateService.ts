@@ -519,41 +519,54 @@ export class AccurateService {
 
   private static async pullPelanggan(host: string, headers: Record<string, string>): Promise<number> {
     // API endpoint: POST /api/customer/list.do
+    // list.do hanya mengembalikan id,name,customerNo,suspended walau field lain
+    // diminta — kategori, alamat pengiriman, salesman, dsb hanya tersedia lewat
+    // customer/detail.do per pelanggan (sama seperti sales-invoice/detail.do).
     let count = 0;
 
     await fetchAllAccuratePages(
       `${host}/accurate/api/customer/list.do`,
       headers,
       {
-        fields: 'id,name,customerNo,customerGroup,suspended,shipZipCode,shipCity,shipProvince,shipStreet',
+        fields: 'id,name,customerNo,suspended',
       },
       async (customers) => {
-        for (const cust of customers) {
+        await throttledMap(customers, async (cust) => {
+          let detail: any = null;
+          try {
+            const detailRes = await axiosGetWithRetry(`${host}/accurate/api/customer/detail.do`, {
+              params: { id: cust.id },
+              headers,
+              maxRedirects: 5,
+            });
+            detail = detailRes.data?.d;
+          } catch (detailErr: any) {
+            logger.error(`Gagal ambil detail pelanggan id=${cust.id} saat sync: ${detailErr.message}`);
+          }
+
+          const { salesId: salesId2 } = await resolveSalesman(host, headers, detail?.salesman2Id ?? null);
+
+          const data = {
+            nama: detail?.name || cust.name,
+            kategori_pelanggan: detail?.category?.name || 'Umum',
+            non_aktif: detail?.suspended ?? cust.suspended ?? false,
+            kota_pengiriman: detail?.shipCity || null,
+            provinsi_pengiriman: detail?.shipProvince || null,
+            alamat_lengkap_pengiriman: detail?.shipStreet || null,
+            id_karyawan_default_penjual: detail?.salesman?.number || null,
+            nama_default_penjual: detail?.salesman?.name || null,
+            id_karyawan_tenaga_penjual_kedua: salesId2,
+            tgl_jam_pembuatan: detail?.createDate ? parseAccurateDate(detail.createDate) : null,
+            synced_at: new Date(),
+          };
+
           await prisma.pelanggan.upsert({
             where: { id_pelanggan: cust.customerNo },
-            update: {
-              nama: cust.name,
-              kategori_pelanggan: cust.customerGroup?.name || 'Umum',
-              non_aktif: cust.suspended || false,
-              kota_pengiriman: cust.shipCity,
-              provinsi_pengiriman: cust.shipProvince,
-              alamat_lengkap_pengiriman: cust.shipStreet,
-              synced_at: new Date(),
-            },
-            create: {
-              id_pelanggan: cust.customerNo,
-              nama: cust.name,
-              kategori_pelanggan: cust.customerGroup?.name || 'Umum',
-              non_aktif: cust.suspended || false,
-              kota_pengiriman: cust.shipCity,
-              provinsi_pengiriman: cust.shipProvince,
-              alamat_lengkap_pengiriman: cust.shipStreet,
-              tgl_jam_pembuatan: new Date(),
-              synced_at: new Date(),
-            },
+            update: data,
+            create: { id_pelanggan: cust.customerNo, ...data },
           });
           count++;
-        }
+        });
       }
     );
 
