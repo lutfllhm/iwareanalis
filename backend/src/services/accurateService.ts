@@ -112,12 +112,18 @@ async function resolveSalesman(
       maxRedirects: 5,
     });
     const emp = empRes.data?.d;
-    const resolved = { number: emp?.number || '', name: emp?.name || '' };
+    // Beberapa karyawan di Accurate tidak mengisi field "name" (hanya "number"
+    // yang wajib) — pakai nomor karyawan sebagai fallback nama supaya baris ini
+    // tidak jatuh ke NULL di database padahal salesman-nya sebenarnya diketahui.
+    const resolved = { number: emp?.number || '', name: emp?.name || emp?.number || '' };
     salesmanResolveCache.set(masterSalesmanId, resolved);
     await sleep(ACCURATE_CALL_DELAY_MS);
     return { salesId: resolved.number || null, salesName: resolved.name || null };
   } catch (empErr: any) {
     logger.error(`Gagal ambil employee id=${masterSalesmanId} saat sync: ${empErr.message}`);
+    // Tidak di-cache: kegagalan di sini biasanya sesaat (network/5xx setelah
+    // retry 429 habis), bukan berarti karyawan tidak ada. Sync berikutnya akan
+    // mencoba resolve ulang alih-alih mengunci ID ini ke NULL selamanya.
     return { salesId: null, salesName: null };
   }
 }

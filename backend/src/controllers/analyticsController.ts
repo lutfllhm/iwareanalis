@@ -250,7 +250,8 @@ export async function getSalespersonPerformance(req: AuthenticatedRequest, res: 
     const salesMap = new Map<string, { name: string; sales: number; deals: number }>();
 
     rincian.forEach(line => {
-      const name = line.nama_tenaga_penjual || 'General Sales';
+      // Aman non-null: query di atas sudah filter nama_tenaga_penjual: { not: null }.
+      const name = line.nama_tenaga_penjual as string;
       const existing = salesMap.get(name) || { name, sales: 0, deals: 0 };
       existing.sales += Number(line.total_harga);
       existing.deals += 1;
