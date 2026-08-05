@@ -34,7 +34,11 @@ const SYNC_HISTORY_YEARS = 2;
 // Accurate) alih-alih menarik ulang 2 tahun penuh setiap siklus.
 const SCHEDULED_SYNC_LOOKBACK_DAYS = 7;
 
-function getSyncDateRange(fullHistory: boolean): { startDate: string; endDate: string } {
+// Accurate list.do TIDAK memfilter lewat param polos startDate/endDate — param
+// itu diam-diam diabaikan dan endpoint mengembalikan SELURUH data (ratusan
+// ribu baris untuk sales-invoice). Filter tanggal yang benar dikenali lewat
+// syntax filter.<field>.op=BETWEEN + filter.<field>.val[0]/val[1].
+function getSyncDateRangeParams(fullHistory: boolean, field: string): Record<string, string> {
   const end = new Date();
   const start = new Date();
   if (fullHistory) {
@@ -42,7 +46,11 @@ function getSyncDateRange(fullHistory: boolean): { startDate: string; endDate: s
   } else {
     start.setDate(start.getDate() - SCHEDULED_SYNC_LOOKBACK_DAYS);
   }
-  return { startDate: formatAccurateDate(start), endDate: formatAccurateDate(end) };
+  return {
+    [`filter.${field}.op`]: 'BETWEEN',
+    [`filter.${field}.val[0]`]: formatAccurateDate(start),
+    [`filter.${field}.val[1]`]: formatAccurateDate(end),
+  };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -56,11 +64,16 @@ function sleep(ms: number): Promise<void> {
 const ACCURATE_CALL_DELAY_MS = 250;
 const ACCURATE_MAX_RETRIES = 4;
 
+// Accurate kadang tidak merespon sama sekali (bukan 429/5xx, koneksi TCP
+// menggantung) sehingga tanpa timeout eksplisit, sync bisa macet tanpa
+// batas waktu dan tanpa error yang bisa di-retry.
+const ACCURATE_REQUEST_TIMEOUT_MS = 30_000;
+
 export async function axiosGetWithRetry<T = any>(url: string, options: Record<string, any>): Promise<{ data: T }> {
   let attempt = 0;
   while (true) {
     try {
-      return await axios.get(url, options);
+      return await axios.get(url, { timeout: ACCURATE_REQUEST_TIMEOUT_MS, ...options });
     } catch (err: any) {
       const status = err.response?.status;
       attempt++;
@@ -171,6 +184,7 @@ async function fetchAllAccuratePages(
             {
               headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
               maxRedirects: 5,
+              timeout: ACCURATE_REQUEST_TIMEOUT_MS,
             }
           );
         } catch (err: any) {
@@ -295,7 +309,7 @@ export class AccurateService {
       const response = await axios.post(
         'https://account.accurate.id/api/api-token.do',
         null,
-        { headers, maxRedirects: 5 }
+        { headers, maxRedirects: 5, timeout: ACCURATE_REQUEST_TIMEOUT_MS }
       );
 
       logger.info(`Accurate /api/api-token.do raw response: ${JSON.stringify(response.data)}`);
@@ -575,9 +589,9 @@ export class AccurateService {
 
   private static async pullFakturPenjualan(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
     // API endpoint: POST /api/sales-invoice/list.do
-    // Tanpa startDate/endDate & paginasi, Accurate hanya mengembalikan satu
-    // halaman data terbaru (±100-200 baris) dan histori lama diam-diam hilang.
-    const { startDate, endDate } = getSyncDateRange(fullHistory);
+    // Tanpa filter tanggal & paginasi, Accurate mengembalikan SELURUH invoice
+    // (ratusan ribu baris) alih-alih hanya histori yang diminta.
+    const dateParams = getSyncDateRangeParams(fullHistory, 'transDate');
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -585,8 +599,7 @@ export class AccurateService {
       headers,
       {
         fields: 'id,number,transDate,customer,totalAmount,paymentAmount,salesman',
-        startDate,
-        endDate,
+        ...dateParams,
       },
       async (invoices) => {
         // Tiap invoice punya nomor unik dan hanya menulis baris miliknya sendiri
@@ -721,6 +734,7 @@ export class AccurateService {
             params: { itemNo: item.kode_barang },
             headers,
             maxRedirects: 5,
+            timeout: ACCURATE_REQUEST_TIMEOUT_MS,
           }
         );
 
@@ -776,6 +790,7 @@ export class AccurateService {
             },
             headers,
             maxRedirects: 5,
+            timeout: ACCURATE_REQUEST_TIMEOUT_MS,
           }
         );
 
@@ -818,6 +833,7 @@ export class AccurateService {
       {
         headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
         maxRedirects: 5,
+        timeout: ACCURATE_REQUEST_TIMEOUT_MS,
       }
     );
 
@@ -865,7 +881,7 @@ export class AccurateService {
     // Satu-satunya cara mendapatkan tenaga penjual adalah lewat sales-return/detail.do
     // (field "masterSalesmanId", hanya ID numerik internal), lalu resolve ID tersebut
     // ke kode karyawan via employee/detail.do.
-    const { startDate, endDate } = getSyncDateRange(fullHistory);
+    const dateParams = getSyncDateRangeParams(fullHistory, 'transDate');
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -873,8 +889,7 @@ export class AccurateService {
       headers,
       {
         fields: 'id,number,transDate,customer,totalAmount',
-        startDate,
-        endDate,
+        ...dateParams,
       },
       async (returns) => {
         // Panggilan detail di-throttle lewat throttledMap (paralel terbatas +
@@ -959,7 +974,7 @@ export class AccurateService {
    * karyawan lewat employee/detail.do (sama seperti pullFakturPenjualan).
    */
   private static async pullRincianPenjualanBarang(host: string, headers: Record<string, string>, fullHistory: boolean = false): Promise<number> {
-    const { startDate, endDate } = getSyncDateRange(fullHistory);
+    const dateParams = getSyncDateRangeParams(fullHistory, 'transDate');
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -967,8 +982,7 @@ export class AccurateService {
       headers,
       {
         fields: 'id,number,transDate,customer',
-        startDate,
-        endDate,
+        ...dateParams,
       },
       async (invoices) => {
         // Tiap invoice punya nomor unik dan rincian yang ditulis (delete+create)
@@ -989,18 +1003,13 @@ export class AccurateService {
             });
             detailItems = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
             masterSalesmanId = detailRes.data?.d?.masterSalesmanId ?? null;
-            // DEBUG SEMENTARA: cetak struktur mentah untuk cari nama field "Penjual" per baris.
-            // Hapus blok ini setelah field yang benar ditemukan.
-            logger.info(`DEBUG detail invoice id=${inv.id} number=${inv.number}: ` + JSON.stringify({
-              masterSalesmanId: detailRes.data?.d?.masterSalesmanId,
-              firstDetailItemKeys: detailItems[0] ? Object.keys(detailItems[0]) : [],
-              firstDetailItemRaw: detailItems[0] || null,
-            }));
           } catch (detailErr: any) {
             logger.error(`Gagal ambil detail invoice id=${inv.id} saat sync: ${detailErr.message}`);
           }
 
-          const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
+          // Fallback dipakai hanya bila baris tidak membawa data salesman sendiri.
+          const { salesId: fallbackSalesId, salesName: fallbackSalesName } =
+            await resolveSalesman(host, headers, masterSalesmanId);
 
           // Hapus rincian lama invoice ini agar tidak duplikat dengan sync sebelumnya
           await prisma.rincianPenjualanBarang.deleteMany({
@@ -1029,6 +1038,14 @@ export class AccurateService {
 
             const kuantitas = line.quantity || 0;
             const hargaSatuan = line.unitPrice || line.basePrice || 0;
+
+            // Salesman bisa berbeda per baris item (salesman1Id/salesmanName/
+            // salesmanList), bukan cuma satu per invoice — pakai data baris dulu,
+            // fallback ke masterSalesmanId invoice bila baris tidak membawanya.
+            const lineSalesmanNumber: string | null = line.salesmanList?.[0]?.number || null;
+            const lineSalesmanName: string | null = line.salesmanName || line.salesmanList?.[0]?.name || null;
+            const salesId = lineSalesmanNumber || fallbackSalesId;
+            const salesName = lineSalesmanName || fallbackSalesName;
 
             await prisma.rincianPenjualanBarang.create({
               data: {
