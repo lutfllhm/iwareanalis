@@ -38,7 +38,11 @@ export async function executeAllSyncs(): Promise<void> {
   }
 
   logger.info('Background scheduled sync started.');
-  const modules = ['Barang & Jasa', 'Pelanggan', 'Faktur Penjualan', 'Retur Penjualan'];
+  // Rincian Penjualan Barang harus disinkron setelah Faktur Penjualan: setiap
+  // barisnya punya foreign key wajib ke nomor invoice di faktur_penjualan
+  // (lihat relasi `faktur` di schema.prisma), jadi invoice-nya harus sudah ada
+  // duluan atau create() akan gagal foreign key constraint.
+  const modules = ['Barang & Jasa', 'Pelanggan', 'Faktur Penjualan', 'Rincian Penjualan Barang', 'Retur Penjualan'];
 
   try {
     for (const mod of modules) {

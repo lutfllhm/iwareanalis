@@ -57,6 +57,20 @@ export default function SettingsPage() {
     { key: 'work-order', label: 'Work Order Detail' },
   ]);
 
+  // Modules synced manually from Accurate, in the same dependency order the
+  // scheduler uses — Rincian Penjualan Barang has a foreign key on Faktur
+  // Penjualan's nomor, so it must be synced after that module has data.
+  const syncableModules = [
+    'Barang & Jasa',
+    'Pelanggan',
+    'Faktur Penjualan',
+    'Rincian Penjualan Barang',
+    'Retur Penjualan',
+    'Mutasi Serial Number',
+    'Ringkasan Mutasi Stok',
+    'Work Order',
+  ];
+
   // 2FA TOTP setup states
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
   const [show2FaSetup, setShow2FaSetup] = useState(false);
@@ -148,6 +162,26 @@ export default function SettingsPage() {
     onError: (err: ApiError) => {
       setToast({ type: 'error', msg: err.response?.data?.message || 'Gagal menghubungkan ke Accurate' });
       setTimeout(() => setToast(null), 3000);
+    },
+  });
+
+  // Mutation to manually trigger a full-history sync for one module
+  const [syncingModule, setSyncingModule] = useState<string | null>(null);
+  const syncModuleMutation = useMutation({
+    mutationFn: async (moduleName: string) => {
+      setSyncingModule(moduleName);
+      const res = await api.post('/sync/trigger', { moduleName });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setToast({ type: 'success', msg: data.message || 'Sinkronisasi berhasil' });
+      setSyncingModule(null);
+      setTimeout(() => setToast(null), 4000);
+    },
+    onError: (err: ApiError) => {
+      setToast({ type: 'error', msg: err.response?.data?.message || 'Sinkronisasi gagal' });
+      setSyncingModule(null);
+      setTimeout(() => setToast(null), 6000);
     },
   });
 
@@ -466,6 +500,37 @@ export default function SettingsPage() {
                 >
                   Perbarui Jadwal Sync
                 </button>
+              </div>
+            </div>
+
+            {/* Manual full-history sync per module */}
+            <div className="card-elevated bg-card border border-border/60 rounded-xl p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Sinkronisasi Manual</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tarik seluruh histori data dari Accurate untuk satu modul (bukan hanya beberapa hari terakhir seperti sync otomatis).
+                  Jalankan <strong>Faktur Penjualan</strong> terlebih dahulu sebelum <strong>Rincian Penjualan Barang</strong>, karena rincian bergantung pada nomor faktur yang sudah tersimpan.
+                </p>
+              </div>
+
+              <div className="divide-y divide-border/50">
+                {syncableModules.map((mod) => {
+                  const isThisSyncing = syncingModule === mod;
+                  const isAnySyncing = syncModuleMutation.isPending;
+                  return (
+                    <div key={mod} className="flex items-center justify-between py-3">
+                      <span className="text-sm font-semibold text-foreground">{mod}</span>
+                      <button
+                        onClick={() => syncModuleMutation.mutate(mod)}
+                        disabled={isAnySyncing}
+                        className="px-3 py-1.5 rounded-lg border border-input bg-background/50 hover:bg-accent text-foreground text-xs font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        <RefreshCw size={12} className={isThisSyncing ? 'animate-spin' : ''} />
+                        {isThisSyncing ? 'Menyinkron...' : 'Sync Now'}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
