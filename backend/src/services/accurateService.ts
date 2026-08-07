@@ -25,9 +25,10 @@ export function formatAccurateDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
-// Berapa lama ke belakang histori transaksi ditarik saat sync manual/awal (3 tahun),
-// supaya tidak hanya mengandalkan batch/halaman default yang dikembalikan Accurate.
-const SYNC_HISTORY_YEARS = 3;
+// Berapa lama ke belakang histori transaksi ditarik saat sync manual/awal (7 tahun,
+// supaya mencakup data mulai 2020), alih-alih hanya mengandalkan batch/halaman
+// default yang dikembalikan Accurate.
+const SYNC_HISTORY_YEARS = 7;
 
 // Sync terjadwal (cron) berjalan berulang dengan interval singkat, jadi cukup
 // menarik beberapa hari terakhir (invoice baru atau yang baru saja diedit di
