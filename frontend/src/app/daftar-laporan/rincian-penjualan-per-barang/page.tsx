@@ -85,12 +85,8 @@ export default function RincianPenjualanPerBarangPage() {
     'rincian_penjualan'
   );
 
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
   const [cabangOpen, setCabangOpen] = useState(false);
