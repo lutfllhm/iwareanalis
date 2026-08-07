@@ -85,8 +85,12 @@ export default function RincianPenjualanPerBarangPage() {
     'rincian_penjualan'
   );
 
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // Default rentang tanggal selalu diisi (bukan string kosong) supaya filter
+  // transDate selalu dikirim ke Accurate — tanpa filter tanggal eksplisit,
+  // Accurate list.do bisa membatasi hasil default tanpa mengembalikan histori lama.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState('2020-01-01');
+  const [endDate, setEndDate] = useState(todayStr);
 
   const [selectedCabang, setSelectedCabang] = useState<string[]>([]);
   const [cabangOpen, setCabangOpen] = useState(false);
