@@ -62,7 +62,7 @@ function sleep(ms: number): Promise<void> {
 // Panggilan detail per baris (detail.do, employee/detail.do, item/list.do)
 // dilakukan sequentially dengan jeda kecil (throttleAccurateCall) dan retry
 // dengan backoff di sini supaya sync besar tidak gagal total saat kena 429.
-const ACCURATE_CALL_DELAY_MS = 250;
+const ACCURATE_CALL_DELAY_MS = 500;
 const ACCURATE_MAX_RETRIES = 4;
 
 // Accurate kadang tidak merespon sama sekali (bukan 429/5xx, koneksi TCP
@@ -89,11 +89,11 @@ export async function axiosGetWithRetry<T = any>(url: string, options: Record<st
 }
 
 // Berapa banyak item diproses bersamaan di throttledMap. Accurate belum
-// mendokumentasikan batas rate limit resmi, jadi angka ini dipilih konservatif
-// (naik dari sepenuhnya sequential) — tiap worker tetap diberi jeda
-// ACCURATE_CALL_DELAY_MS antar panggilannya sendiri, dan axiosGetWithRetry
-// tetap menangani 429 dengan backoff bila limit tetap tersentuh.
-const ACCURATE_CONCURRENCY = 5;
+// mendokumentasikan batas rate limit resmi; 5 worker paralel terbukti terlalu
+// agresif pada sync full-history (ribuan invoice) — nyaris tiap request kena
+// 429, retry backoff menumpuk dan sync jadi jauh lebih lambat daripada kalau
+// dari awal lebih pelan. 2 worker jauh lebih stabil untuk beban besar ini.
+const ACCURATE_CONCURRENCY = 2;
 
 // Jalankan `fn` untuk tiap item lewat beberapa worker paralel (dibatasi
 // ACCURATE_CONCURRENCY), masing-masing tetap throttled dengan jeda tetap,
