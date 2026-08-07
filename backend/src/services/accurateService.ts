@@ -21,7 +21,7 @@ export function parseAccurateDate(value: string | undefined | null): Date {
   );
 }
 
-function formatAccurateDate(d: Date): string {
+export function formatAccurateDate(d: Date): string {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 

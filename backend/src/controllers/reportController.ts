@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
-import { AccurateService, parseAccurateDate, axiosGetWithRetry, throttledMap } from '../services/accurateService';
+import { AccurateService, parseAccurateDate, formatAccurateDate, axiosGetWithRetry, throttledMap } from '../services/accurateService';
 import { config } from '../config';
 import prisma from '../services/db';
 import logger from '../services/logger';
@@ -109,8 +109,20 @@ export async function getRincianPenjualanPerBarang(req: AuthenticatedRequest, re
       page:     String(page),
     };
 
-    if (startDate) params.startDate = startDate;
-    if (endDate)   params.endDate   = endDate;
+    // Accurate list.do mengabaikan param polos startDate/endDate — butuh syntax
+    // filter.<field>.op=BETWEEN + filter.<field>.val[0]/val[1] (lihat komentar
+    // getSyncDateRangeParams di accurateService.ts).
+    if (startDate && endDate) {
+      params['filter.transDate.op'] = 'BETWEEN';
+      params['filter.transDate.val[0]'] = formatAccurateDate(new Date(startDate));
+      params['filter.transDate.val[1]'] = formatAccurateDate(new Date(endDate));
+    }
+
+    // Pencarian dikirim langsung ke Accurate lewat keywords, bukan disaring di
+    // memori setelah menarik satu halaman — kalau tidak, faktur/barang yang
+    // dicari tapi tidak berada di halaman yang kebetulan ditarik akan tampak
+    // "tidak ditemukan" meski datanya ada di Accurate.
+    if (q) params.keywords = q;
 
     logger.info(`Fetch Accurate sales-invoice/list.do host=${host} page=${page}`);
 
