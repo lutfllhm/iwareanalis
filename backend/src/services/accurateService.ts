@@ -4,7 +4,7 @@ import prisma from './db';
 import { encrypt, decrypt } from './cryptoService';
 import { config } from '../config';
 import logger from './logger';
-import { SyncStatus } from '@prisma/client';
+import { SyncStatus, Prisma } from '@prisma/client';
 
 // Accurate Online API mengembalikan tanggal sebagai string "DD/MM/YYYY", kadang
 // dengan jam menyertai (mis. createDate = "DD/MM/YYYY HH:mm:ss"). `new Date(str)`
@@ -731,6 +731,136 @@ export class AccurateService {
     );
 
     return count;
+  }
+
+  // Berapa halaman sales-invoice/list.do diproses per siklus backfill. list.do
+  // tidak memfilter tanggal secara nyata (lihat getSyncDateRangeParams di atas)
+  // dan mengembalikan seluruh data (ratusan ribu baris, terurut dari
+  // TERBARU ke TERLAMA) — jadi backfill men-scan semua halaman secara linear.
+  // 20 halaman/siklus (~2000 baris, list.do saja tanpa detail.do per invoice)
+  // terbukti aman selesai jauh di bawah interval cron 5 menit.
+  private static readonly BACKFILL_PAGES_PER_CYCLE = 20;
+  private static readonly BACKFILL_CHECKPOINT_KEY = 'HISTORICAL_BACKFILL_PAGE';
+
+  /**
+   * Mencicil pengisian tabel faktur_penjualan (nomor, tanggal, pelanggan,
+   * total — TANPA rincian barang & nama sales) dari histori penuh Accurate,
+   * beberapa halaman per pemanggilan. Dirancang dipanggil tiap siklus cron
+   * sync terjadwal, terpisah dari pullFakturPenjualan (yang scope-nya cuma
+   * SCHEDULED_SYNC_LOOKBACK_DAYS hari terakhir). Checkpoint (halaman
+   * terakhir yang selesai) disimpan di tabel Setting supaya bertahan lintas
+   * restart proses/container, dan proses berhenti sendiri begitu mencapai
+   * halaman terakhir Accurate (checkpoint diset "DONE").
+   *
+   * Rincian barang & nama tenaga penjual TIDAK diisi di sini — itu perlu
+   * detail.do per invoice yang jauh lebih lambat (lihat pullFakturPenjualan),
+   * dan menyusul lewat sync manual "fullHistory" setelah backfill ini selesai.
+   */
+  static async backfillHistoricalInvoices(): Promise<{ done: boolean; pagesProcessed: number; upserted: number }> {
+    const checkpoint = await this.getSetting(this.BACKFILL_CHECKPOINT_KEY);
+    if (checkpoint === 'DONE') {
+      return { done: true, pagesProcessed: 0, upserted: 0 };
+    }
+
+    const host = await this.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      logger.warn('Backfill historis dilewati: sesi Accurate belum tersedia.');
+      return { done: false, pagesProcessed: 0, upserted: 0 };
+    }
+    const headers = await this.getApiTokenHeaders();
+
+    let page = Number(checkpoint) || 1;
+    let pagesProcessed = 0;
+    let upserted = 0;
+
+    for (let i = 0; i < this.BACKFILL_PAGES_PER_CYCLE; i++) {
+      let response: any;
+      let attempt = 0;
+      while (true) {
+        try {
+          response = await axios.post(
+            `${host}/accurate/api/sales-invoice/list.do`,
+            new URLSearchParams({
+              fields: 'id,number,transDate,customer,totalAmount,paymentAmount',
+              'sp.page': String(page),
+              'sp.pageSize': '100',
+            }).toString(),
+            {
+              headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+              maxRedirects: 5,
+              timeout: ACCURATE_REQUEST_TIMEOUT_MS,
+            }
+          );
+          break;
+        } catch (err: any) {
+          attempt++;
+          if (err.response?.status !== 429 || attempt > ACCURATE_MAX_RETRIES) throw err;
+          const backoffMs = ACCURATE_CALL_DELAY_MS * 2 ** attempt;
+          logger.warn(`Backfill historis rate limit (429) page=${page}, retry ${attempt}/${ACCURATE_MAX_RETRIES} after ${backoffMs}ms`);
+          await sleep(backoffMs);
+        }
+      }
+
+      const rows: any[] = response.data?.d || [];
+      if (rows.length === 0) {
+        await this.saveSetting(this.BACKFILL_CHECKPOINT_KEY, 'DONE');
+        logger.info(`Backfill historis SELESAI setelah page=${page}. Total halaman diproses siklus ini: ${pagesProcessed}.`);
+        return { done: true, pagesProcessed, upserted };
+      }
+
+      const validRows = rows.filter((inv) => inv.number && inv.transDate);
+      if (validRows.length > 0) {
+        const customerMap = new Map<string, string>();
+        for (const inv of validRows) {
+          const no = inv.customer?.customerNo || 'CUST-UNKNOWN';
+          if (!customerMap.has(no)) customerMap.set(no, inv.customer?.name || 'Pelanggan Baru');
+        }
+        const custRows = Array.from(customerMap.entries()).map(
+          ([no, name]) => Prisma.sql`(${no}, ${name}, NOW())`
+        );
+        await prisma.$executeRaw`
+          INSERT INTO pelanggan (id_pelanggan, nama, synced_at)
+          VALUES ${Prisma.join(custRows)}
+          ON DUPLICATE KEY UPDATE id_pelanggan = id_pelanggan
+        `;
+
+        const invRows = validRows.map((inv) => {
+          const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
+          const tanggal = parseAccurateDate(inv.transDate);
+          const tanggalSql = `${tanggal.getFullYear()}-${String(tanggal.getMonth() + 1).padStart(2, '0')}-${String(tanggal.getDate()).padStart(2, '0')}`;
+          const total = inv.totalAmount || 0;
+          const pembayaran = inv.paymentAmount || 0;
+          return Prisma.sql`(${inv.number}, ${customerNo}, ${tanggalSql}, ${total}, ${pembayaran}, NOW())`;
+        });
+        await prisma.$executeRaw`
+          INSERT INTO faktur_penjualan (nomor, id_pelanggan, tanggal, total, pembayaran, synced_at)
+          VALUES ${Prisma.join(invRows)}
+          ON DUPLICATE KEY UPDATE
+            id_pelanggan = VALUES(id_pelanggan),
+            tanggal = VALUES(tanggal),
+            total = VALUES(total),
+            pembayaran = VALUES(pembayaran),
+            synced_at = VALUES(synced_at)
+        `;
+        upserted += validRows.length;
+      }
+
+      const pageCount = response.data.sp?.pageCount || 1;
+      pagesProcessed++;
+      page++;
+      await this.saveSetting(this.BACKFILL_CHECKPOINT_KEY, String(page));
+
+      if (page > pageCount) {
+        await this.saveSetting(this.BACKFILL_CHECKPOINT_KEY, 'DONE');
+        logger.info(`Backfill historis SELESAI mencapai akhir data (pageCount=${pageCount}).`);
+        return { done: true, pagesProcessed, upserted };
+      }
+
+      await sleep(ACCURATE_CALL_DELAY_MS);
+    }
+
+    logger.info(`Backfill historis: page=${page} pagesProcessed=${pagesProcessed} upserted=${upserted} (siklus ini selesai, lanjut siklus berikutnya)`);
+    return { done: false, pagesProcessed, upserted };
   }
 
   private static async pullMutasiSerialNumber(host: string, headers: Record<string, string>): Promise<number> {

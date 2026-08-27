@@ -57,6 +57,25 @@ export async function executeAllSyncs(): Promise<void> {
         logger.error(`Unhandled error during scheduled sync for ${mod}:`, err);
       }
     }
+
+    // Mencicil histori penuh (faktur_penjualan: nomor/tanggal/pelanggan/total
+    // sejak data paling lama di Accurate) beberapa halaman per siklus, terpisah
+    // dari sync 7-hari-terakhir di atas. Berhenti otomatis sendiri begitu
+    // checkpoint mencapai "DONE". Gagal di sini tidak boleh menggagalkan
+    // sync reguler yang baru selesai di atas.
+    try {
+      const backfill = await AccurateService.backfillHistoricalInvoices();
+      if (backfill.done) {
+        if (backfill.pagesProcessed > 0) {
+          logger.info('Backfill historis faktur_penjualan telah selesai sepenuhnya.');
+        }
+      } else {
+        logger.info(`Backfill historis: ${backfill.pagesProcessed} halaman diproses, ${backfill.upserted} invoice di-upsert siklus ini.`);
+      }
+    } catch (err) {
+      logger.error('Unhandled error during historical backfill:', err);
+    }
+
     logger.info('Background scheduled sync completed.');
   } finally {
     releaseSyncLock();
