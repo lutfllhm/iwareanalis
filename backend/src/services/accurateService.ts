@@ -207,6 +207,7 @@ async function fetchAllAccuratePages(
     totalRows += rows.length;
 
     const pageCount = response.data.sp?.pageCount || 1;
+    logger.info(`fetchAllAccuratePages ${url}: page=${page}/${pageCount} rows=${rows.length} totalRows=${totalRows}`);
     if (page >= pageCount || rows.length === 0) break;
     page++;
     await sleep(ACCURATE_CALL_DELAY_MS);
@@ -500,6 +501,10 @@ export class AccurateService {
       },
       async (items) => {
         for (const item of items) {
+          if (!item.no) {
+            logger.warn(`Lewati baris barang tidak lengkap dari Accurate (name=${item.name}): kode barang (no) kosong.`);
+            continue;
+          }
           // Mapping field Accurate -> Database
           await prisma.barangJasa.upsert({
             where: { kode_barang: item.no },
@@ -559,6 +564,14 @@ export class AccurateService {
             logger.error(`Gagal ambil detail pelanggan id=${cust.id} saat sync: ${detailErr.message}`);
           }
 
+          // customer/list.do kadang tidak mengisi customerNo walau field diminta;
+          // fallback ke customerNo dari detail.do sebelum melewati baris ini.
+          const customerNo = cust.customerNo || detail?.customerNo;
+          if (!customerNo) {
+            logger.warn(`Lewati baris pelanggan tidak lengkap dari Accurate (id=${cust.id}): customerNo kosong.`);
+            return;
+          }
+
           const { salesId: salesId2 } = await resolveSalesman(host, headers, detail?.salesman2Id ?? null);
 
           const data = {
@@ -576,9 +589,9 @@ export class AccurateService {
           };
 
           await prisma.pelanggan.upsert({
-            where: { id_pelanggan: cust.customerNo },
+            where: { id_pelanggan: customerNo },
             update: data,
-            create: { id_pelanggan: cust.customerNo, ...data },
+            create: { id_pelanggan: customerNo, ...data },
           });
           count++;
         });
