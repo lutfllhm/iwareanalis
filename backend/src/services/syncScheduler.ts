@@ -58,19 +58,34 @@ export async function executeAllSyncs(): Promise<void> {
       }
     }
 
-    // Mencicil histori penuh (faktur_penjualan: nomor/tanggal/pelanggan/total
-    // sejak data paling lama di Accurate) beberapa halaman per siklus, terpisah
-    // dari sync 7-hari-terakhir di atas. Berhenti otomatis sendiri begitu
-    // checkpoint mencapai "DONE". Gagal di sini tidak boleh menggagalkan
-    // sync reguler yang baru selesai di atas.
+    // Backfill histori penuh berjalan 3 tahap BERURUTAN, tiap tahap hanya
+    // mulai setelah tahap sebelumnya selesai (done=true) — supaya rate limit
+    // Accurate tidak dibebani beberapa proses backfill sekaligus, dan supaya
+    // data ringkas (tahap 1) tersedia dulu untuk analitik sebelum detail yang
+    // jauh lebih lambat (tahap 3) menyusul. Kegagalan di satu tahap tidak
+    // boleh menggagalkan sync reguler yang baru selesai di atas.
     try {
-      const backfill = await AccurateService.backfillHistoricalInvoices();
-      if (backfill.done) {
-        if (backfill.pagesProcessed > 0) {
-          logger.info('Backfill historis faktur_penjualan telah selesai sepenuhnya.');
-        }
+      const invoiceBackfill = await AccurateService.backfillHistoricalInvoices();
+      if (!invoiceBackfill.done) {
+        logger.info(`Backfill historis faktur: ${invoiceBackfill.pagesProcessed} halaman, ${invoiceBackfill.upserted} invoice di-upsert siklus ini.`);
+      } else if (invoiceBackfill.pagesProcessed > 0) {
+        logger.info('Backfill historis faktur_penjualan telah selesai sepenuhnya. Lanjut ke backfill retur.');
       } else {
-        logger.info(`Backfill historis: ${backfill.pagesProcessed} halaman diproses, ${backfill.upserted} invoice di-upsert siklus ini.`);
+        // Tahap 1 sudah DONE dari siklus sebelumnya — lanjut ke tahap 2.
+        const returBackfill = await AccurateService.backfillReturPenjualan();
+        if (!returBackfill.done) {
+          logger.info(`Backfill historis retur: ${returBackfill.pagesProcessed} halaman, ${returBackfill.upserted} retur di-upsert siklus ini.`);
+        } else if (returBackfill.pagesProcessed > 0) {
+          logger.info('Backfill historis retur_penjualan telah selesai sepenuhnya. Lanjut ke backfill rincian invoice.');
+        } else {
+          // Tahap 1 & 2 sudah DONE — lanjut ke tahap 3 (paling lambat).
+          const detailBackfill = await AccurateService.backfillInvoiceDetails();
+          if (detailBackfill.processed > 0) {
+            logger.info(`Backfill rincian invoice: ${detailBackfill.processed} invoice dilengkapi siklus ini.`);
+          } else if (detailBackfill.done) {
+            logger.info('Semua tahap backfill historis telah SELESAI.');
+          }
+        }
       }
     } catch (err) {
       logger.error('Unhandled error during historical backfill:', err);

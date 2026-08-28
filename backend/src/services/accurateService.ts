@@ -1103,6 +1103,143 @@ export class AccurateService {
     return count;
   }
 
+  // Retur jauh lebih sedikit volumenya daripada invoice (ratusan per siklus
+  // 7-hari, bukan ribuan), tapi tiap baris tetap butuh 1 panggilan
+  // sales-return/detail.do untuk resolve salesman — lebih berat per baris
+  // daripada backfill invoice ringkas. 5 halaman/siklus (~500 retur, dengan
+  // detail.do + employee/detail.do per baris) tetap aman di bawah interval
+  // cron 5 menit.
+  private static readonly RETUR_BACKFILL_PAGES_PER_CYCLE = 5;
+  private static readonly RETUR_BACKFILL_CHECKPOINT_KEY = 'HISTORICAL_BACKFILL_RETUR_PAGE';
+
+  /**
+   * Mencicil pengisian tabel retur_penjualan dari histori penuh Accurate,
+   * beberapa halaman per pemanggilan. Sama seperti backfillHistoricalInvoices,
+   * tapi dipanggil HANYA setelah backfill invoice selesai (lihat pemanggil di
+   * syncScheduler) supaya tidak membebani rate limit Accurate bersamaan.
+   * Checkpoint tersimpan terpisah di tabel Setting.
+   */
+  static async backfillReturPenjualan(): Promise<{ done: boolean; pagesProcessed: number; upserted: number }> {
+    const checkpoint = await this.getSetting(this.RETUR_BACKFILL_CHECKPOINT_KEY);
+    if (checkpoint === 'DONE') {
+      return { done: true, pagesProcessed: 0, upserted: 0 };
+    }
+
+    const host = await this.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      logger.warn('Backfill retur dilewati: sesi Accurate belum tersedia.');
+      return { done: false, pagesProcessed: 0, upserted: 0 };
+    }
+    const headers = await this.getApiTokenHeaders();
+
+    let page = Number(checkpoint) || 1;
+    let pagesProcessed = 0;
+    let upserted = 0;
+
+    for (let i = 0; i < this.RETUR_BACKFILL_PAGES_PER_CYCLE; i++) {
+      let response: any;
+      let attempt = 0;
+      while (true) {
+        try {
+          response = await axios.post(
+            `${host}/accurate/api/sales-return/list.do`,
+            new URLSearchParams({
+              fields: 'id,number,transDate,customer,totalAmount',
+              'sp.page': String(page),
+              'sp.pageSize': '100',
+            }).toString(),
+            {
+              headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+              maxRedirects: 5,
+              timeout: ACCURATE_REQUEST_TIMEOUT_MS,
+            }
+          );
+          break;
+        } catch (err: any) {
+          attempt++;
+          if (err.response?.status !== 429 || attempt > ACCURATE_MAX_RETRIES) throw err;
+          const backoffMs = ACCURATE_CALL_DELAY_MS * 2 ** attempt;
+          logger.warn(`Backfill retur rate limit (429) page=${page}, retry ${attempt}/${ACCURATE_MAX_RETRIES} after ${backoffMs}ms`);
+          await sleep(backoffMs);
+        }
+      }
+
+      const returns: any[] = response.data?.d || [];
+      if (returns.length === 0) {
+        await this.saveSetting(this.RETUR_BACKFILL_CHECKPOINT_KEY, 'DONE');
+        logger.info(`Backfill retur SELESAI setelah page=${page}.`);
+        return { done: true, pagesProcessed, upserted };
+      }
+
+      const masterSalesmanIds = await throttledMap(returns, async (ret) => {
+        try {
+          const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-return/detail.do`, {
+            params: { id: String(ret.id) },
+            headers,
+            maxRedirects: 5,
+          });
+          return detailRes.data?.d?.masterSalesmanId ?? null;
+        } catch (detailErr: any) {
+          logger.error(`Backfill retur: gagal ambil detail id=${ret.id}: ${detailErr.message}`);
+          return null;
+        }
+      });
+
+      for (let j = 0; j < returns.length; j++) {
+        const ret = returns[j];
+        if (!ret.number || !ret.transDate) continue;
+        const customerNo = ret.customer?.customerNo || 'CUST-UNKNOWN';
+        const { salesId } = await resolveSalesman(host, headers, masterSalesmanIds[j]);
+
+        await prisma.pelanggan.upsert({
+          where: { id_pelanggan: customerNo },
+          update: {},
+          create: { id_pelanggan: customerNo, nama: ret.customer?.name || 'Pelanggan Baru', synced_at: new Date() },
+        });
+
+        await prisma.returPenjualan.upsert({
+          where: { nomor: ret.number },
+          update: {
+            id_pelanggan: customerNo,
+            id_karyawan_penjual_utama: salesId,
+            tanggal: parseAccurateDate(ret.transDate),
+            total: ret.totalAmount || 0,
+            pembayaran_faktur_penjualan: ret.totalAmount || 0,
+            nilai_retur_faktur: ret.totalAmount || 0,
+            synced_at: new Date(),
+          },
+          create: {
+            nomor: ret.number,
+            id_pelanggan: customerNo,
+            id_karyawan_penjual_utama: salesId,
+            tanggal: parseAccurateDate(ret.transDate),
+            total: ret.totalAmount || 0,
+            pembayaran_faktur_penjualan: ret.totalAmount || 0,
+            nilai_retur_faktur: ret.totalAmount || 0,
+            synced_at: new Date(),
+          },
+        });
+        upserted++;
+      }
+
+      const pageCount = response.data.sp?.pageCount || 1;
+      pagesProcessed++;
+      page++;
+      await this.saveSetting(this.RETUR_BACKFILL_CHECKPOINT_KEY, String(page));
+
+      if (page > pageCount) {
+        await this.saveSetting(this.RETUR_BACKFILL_CHECKPOINT_KEY, 'DONE');
+        logger.info(`Backfill retur SELESAI mencapai akhir data (pageCount=${pageCount}).`);
+        return { done: true, pagesProcessed, upserted };
+      }
+
+      await sleep(ACCURATE_CALL_DELAY_MS);
+    }
+
+    logger.info(`Backfill retur: page=${page} pagesProcessed=${pagesProcessed} upserted=${upserted} (siklus ini selesai, lanjut siklus berikutnya)`);
+    return { done: false, pagesProcessed, upserted };
+  }
+
   /**
    * Pull Rincian Penjualan per Barang.
    *
@@ -1216,5 +1353,129 @@ export class AccurateService {
     );
 
     return count;
+  }
+
+  // Berapa invoice diproses per siklus untuk melengkapi rincian barang & nama
+  // sales pada faktur historis. Ini paling berat per baris (1 panggilan
+  // sales-invoice/detail.do PER invoice, plus resolve salesman) — jauh lebih
+  // lambat daripada backfill invoice ringkas (list.do saja). throttledMap
+  // sudah membatasi concurrency + jeda antar panggilan; batas jumlah invoice
+  // per siklus di sini murni supaya 1 siklus tetap selesai di bawah interval
+  // cron 5 menit.
+  private static readonly INVOICE_DETAIL_BACKFILL_BATCH_SIZE = 40;
+
+  /**
+   * Melengkapi rincian barang (tabel rincian_penjualan_barang) dan nama
+   * tenaga penjual utama untuk invoice historis yang sudah masuk lewat
+   * backfillHistoricalInvoices tapi belum punya detail (karena backfill itu
+   * sengaja hanya menarik ringkasan dari list.do, tanpa detail.do per
+   * invoice, supaya cepat). Dipanggil HANYA setelah backfillHistoricalInvoices
+   * dan backfillReturPenjualan selesai (lihat pemanggil di syncScheduler).
+   *
+   * Memprioritaskan invoice dengan tanggal PALING LAMA dulu (data historis),
+   * karena invoice dalam SCHEDULED_SYNC_LOOKBACK_DAYS hari terakhir sudah
+   * otomatis dapat detail lengkap lewat pullFakturPenjualan reguler tiap
+   * siklus cron.
+   */
+  static async backfillInvoiceDetails(): Promise<{ done: boolean; processed: number }> {
+    const host = await this.getSetting('ACCURATE_SESSION_HOST');
+    if (!host) {
+      logger.warn('Backfill rincian invoice dilewati: sesi Accurate belum tersedia.');
+      return { done: false, processed: 0 };
+    }
+    const headers = await this.getApiTokenHeaders();
+
+    const pending = await prisma.fakturPenjualan.findMany({
+      where: { rincian: { none: {} } },
+      orderBy: { tanggal: 'asc' },
+      take: this.INVOICE_DETAIL_BACKFILL_BATCH_SIZE,
+      select: { nomor: true },
+    });
+
+    if (pending.length === 0) {
+      return { done: true, processed: 0 };
+    }
+
+    // sales-invoice/list.do tidak menyediakan cara mencari-per-nomor secara
+    // efisien, tapi detail.do menerima id numerik Accurate — kita perlu id
+    // itu, yang tidak kita simpan. Alih-alih menyimpan id, cari ulang lewat
+    // filter number EQUAL sebelum ambil detail (1 panggilan list.do murah
+    // per invoice, lalu 1 panggilan detail.do).
+    await throttledMap(pending, async (inv) => {
+      try {
+        const listRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/list.do`, {
+          params: {
+            fields: 'id,number,transDate,customer',
+            'filter.number.op': 'EQUAL',
+            'filter.number.val[0]': inv.nomor,
+          },
+          headers,
+          maxRedirects: 5,
+        });
+        const found = listRes.data?.d?.[0];
+        if (!found?.id) {
+          logger.warn(`Backfill rincian invoice: nomor=${inv.nomor} tidak ditemukan lagi di Accurate, dilewati.`);
+          return;
+        }
+
+        const detailRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/detail.do`, {
+          params: { id: found.id },
+          headers,
+          maxRedirects: 5,
+        });
+        const detailItems: any[] = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
+        const masterSalesmanId = detailRes.data?.d?.masterSalesmanId ?? null;
+        const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
+
+        if (salesId) {
+          await prisma.fakturPenjualan.update({
+            where: { nomor: inv.nomor },
+            data: { id_karyawan_penjual_utama: salesId },
+          });
+        }
+
+        for (const line of detailItems) {
+          const itemNo = line.item?.no || 'BRG-UNKNOWN';
+          const itemName = line.item?.name || 'Barang Hilang';
+
+          await prisma.barangJasa.upsert({
+            where: { kode_barang: itemNo },
+            update: {},
+            create: {
+              kode_barang: itemNo,
+              nama_barang: itemName,
+              kategori_barang: 'Umum',
+              tgl_jam_pembuatan: new Date(),
+              kts_gdng_pengguna: 0,
+              kts_semua_gdng: 0,
+              synced_at: new Date(),
+            },
+          });
+
+          const tanggal = parseAccurateDate(found.transDate);
+          await prisma.rincianPenjualanBarang.create({
+            data: {
+              nomor: inv.nomor,
+              kode: itemNo,
+              nama_barang: itemName,
+              kuantitas: line.quantity || 0,
+              harga: line.unitPrice || 0,
+              total_harga: (line.quantity || 0) * (line.unitPrice || 0),
+              penjualan: (line.quantity || 0) * (line.unitPrice || 0),
+              tanggal,
+              nama_pelanggan: found.customer?.name || 'Pelanggan Baru',
+              nama_tenaga_penjual: salesName,
+              id_karyawan_tenaga_penjual: salesId,
+              synced_at: new Date(),
+            },
+          });
+        }
+      } catch (err: any) {
+        logger.error(`Backfill rincian invoice gagal untuk nomor=${inv.nomor}: ${err.message}`);
+      }
+    });
+
+    logger.info(`Backfill rincian invoice: ${pending.length} invoice diproses siklus ini.`);
+    return { done: false, processed: pending.length };
   }
 }
