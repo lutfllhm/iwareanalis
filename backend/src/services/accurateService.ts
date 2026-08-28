@@ -542,6 +542,19 @@ export class AccurateService {
     // list.do hanya mengembalikan id,name,customerNo,suspended walau field lain
     // diminta — kategori, alamat pengiriman, salesman, dsb hanya tersedia lewat
     // customer/detail.do per pelanggan (sama seperti sales-invoice/detail.do).
+    //
+    // Panggilan customer/detail.do (+ resolveSalesman) di-throttle per baris dan
+    // SANGAT lambat untuk seluruh basis pelanggan (ribuan). Data detail pelanggan
+    // (kategori, alamat, salesman) jarang berubah setelah dibuat, jadi sync
+    // reguler tiap 5 menit tidak perlu menariknya ulang untuk pelanggan yang
+    // SUDAH ada di database — cukup untuk pelanggan yang benar-benar baru.
+    // Pelanggan lama cukup diperbarui field ringan (nama, status non-aktif)
+    // dari list.do saja. Ini mengubah sync Pelanggan dari belasan menit
+    // menjadi hitungan detik, sehingga backfill historis (yang berbagi lock
+    // sync yang sama) mendapat cukup slot kosong untuk jalan.
+    const existingIds = new Set(
+      (await prisma.pelanggan.findMany({ select: { id_pelanggan: true } })).map((p) => p.id_pelanggan)
+    );
     let count = 0;
 
     await fetchAllAccuratePages(
@@ -552,6 +565,22 @@ export class AccurateService {
       },
       async (customers) => {
         await throttledMap(customers, async (cust) => {
+          const isKnown = cust.customerNo && existingIds.has(cust.customerNo);
+
+          if (isKnown) {
+            // Pelanggan lama: update field ringan saja, tanpa detail.do.
+            await prisma.pelanggan.update({
+              where: { id_pelanggan: cust.customerNo },
+              data: {
+                nama: cust.name,
+                non_aktif: cust.suspended ?? false,
+                synced_at: new Date(),
+              },
+            });
+            count++;
+            return;
+          }
+
           let detail: any = null;
           try {
             const detailRes = await axiosGetWithRetry(`${host}/accurate/api/customer/detail.do`, {
