@@ -1309,6 +1309,31 @@ export class AccurateService {
             return 0;
           }
 
+          // rincian_penjualan_barang.nomor adalah FK wajib ke faktur_penjualan.
+          // Modul ini diasumsikan jalan SETELAH Faktur Penjualan di siklus yang
+          // sama (lihat urutan modules di syncScheduler), tapi invoice bisa
+          // lolos dari modul itu (baris tidak lengkap, error jaringan, dsb) —
+          // pastikan invoice induknya ada di sini juga sebelum menulis rincian,
+          // supaya FK constraint tidak menggagalkan seluruh siklus sync.
+          const customerNo = inv.customer?.customerNo || 'CUST-UNKNOWN';
+          await prisma.pelanggan.upsert({
+            where: { id_pelanggan: customerNo },
+            update: {},
+            create: { id_pelanggan: customerNo, nama: inv.customer?.name || 'Pelanggan Baru', synced_at: new Date() },
+          });
+          await prisma.fakturPenjualan.upsert({
+            where: { nomor: inv.number },
+            update: {},
+            create: {
+              nomor: inv.number,
+              id_pelanggan: customerNo,
+              tanggal: parseAccurateDate(inv.transDate),
+              total: 0,
+              pembayaran: 0,
+              synced_at: new Date(),
+            },
+          });
+
           let detailItems: any[] = [];
           let masterSalesmanId: number | null = null;
           try {

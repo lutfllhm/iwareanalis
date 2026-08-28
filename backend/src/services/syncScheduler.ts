@@ -7,6 +7,18 @@ let backfillJob: cron.ScheduledTask | null = null;
 let syncInProgress = false;
 
 /**
+ * Diset true oleh cron backfill setiap kali gagal mendapat lock (sync
+ * reguler sedang jalan). executeAllSyncs() mengecek flag ini di antara tiap
+ * modul dan berhenti lebih awal (melepas lock, tidak lanjut ke modul
+ * berikutnya) begitu backfill sedang menunggu — supaya backfill mendapat
+ * giliran nyata alih-alih terus-menerus di-skip selama sync reguler
+ * berjalan hampir tanpa jeda (satu siklus selesai langsung memicu siklus
+ * berikutnya). Modul sync yang terlewat akan tersinkron lagi di siklus
+ * berikutnya, jadi tidak ada data yang hilang — hanya ditunda.
+ */
+let backfillPending = false;
+
+/**
  * Shared lock between scheduled sync, historical backfill, and manual
  * "Sync Now" triggers. All three paths call the same Accurate API under a
  * shared rate limit, so they must not run concurrently — overlapping runs
@@ -48,6 +60,10 @@ export async function executeAllSyncs(): Promise<void> {
 
   try {
     for (const mod of modules) {
+      if (backfillPending) {
+        logger.info(`Sync reguler dihentikan sementara sebelum modul ${mod} — backfill historis sedang menunggu giliran.`);
+        break;
+      }
       try {
         const result = await AccurateService.syncModule(mod);
         if (result.success) {
@@ -73,16 +89,23 @@ export async function executeAllSyncs(): Promise<void> {
  * dari interval cron 5 menit), jadi backfill tidak pernah kebagian giliran:
  * cron sync berikutnya selalu di-skip (masih locked) sebelum sempat sampai
  * ke bagian backfill. Cron backfill ini pakai lock yang SAMA (syncInProgress)
- * supaya tidak jalan bersamaan dengan sync reguler/manual — kalau sync
- * sedang jalan, siklus backfill ini di-skip dan dicoba lagi di trigger
- * berikutnya, bukan menunggu.
+ * supaya tidak jalan bersamaan dengan sync reguler/manual.
+ *
+ * Sync reguler berjalan hampir tanpa jeda (1 siklus selesai langsung memicu
+ * siklus berikutnya di menit kelipatan berikutnya), jadi cuma menandai
+ * "skip siklus ini" tidak cukup — backfill nyaris tidak pernah dapat lock
+ * sama sekali. Saat backfill gagal dapat lock, ia menandai backfillPending
+ * supaya sync reguler yang SEDANG jalan berhenti lebih awal (di antara
+ * modul) dan melepas lock untuk backfill, bukan lanjut ke modul berikutnya.
  */
 export async function executeBackfill(): Promise<void> {
   if (!acquireSyncLock()) {
-    logger.warn('Skipping scheduled backfill: previous cycle (sync or backfill) is still running.');
+    backfillPending = true;
+    logger.warn('Backfill menunggu giliran: sync reguler sedang berjalan, akan diminta berhenti sejenak di antara modul.');
     return;
   }
 
+  backfillPending = false;
   logger.info('Background historical backfill cycle started.');
   // 3 tahap BERURUTAN, tiap tahap hanya mulai setelah tahap sebelumnya
   // selesai (done=true) — supaya data ringkas (tahap 1) tersedia dulu untuk
