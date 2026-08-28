@@ -564,23 +564,29 @@ export class AccurateService {
         fields: 'id,name,customerNo,suspended',
       },
       async (customers) => {
-        await throttledMap(customers, async (cust) => {
-          const isKnown = cust.customerNo && existingIds.has(cust.customerNo);
+        // Pelanggan lama tidak melakukan panggilan API sama sekali (lihat
+        // komentar di atas), jadi diproses LANGSUNG di luar throttledMap —
+        // throttledMap memberi jeda ACCURATE_CALL_DELAY_MS tetap SETELAH
+        // TIAP item tanpa syarat (lihat throttledMap di atas), termasuk item
+        // yang tidak melakukan network call sama sekali. Tanpa pemisahan ini,
+        // 100 pelanggan lama/halaman tetap kena ~25 detik jeda percuma
+        // (100 item / 2 worker x 500ms), sama seperti sebelum optimasi ini.
+        const knownCustomers = customers.filter((c) => c.customerNo && existingIds.has(c.customerNo));
+        const newCustomers = customers.filter((c) => !(c.customerNo && existingIds.has(c.customerNo)));
 
-          if (isKnown) {
-            // Pelanggan lama: update field ringan saja, tanpa detail.do.
-            await prisma.pelanggan.update({
-              where: { id_pelanggan: cust.customerNo },
-              data: {
-                nama: cust.name,
-                non_aktif: cust.suspended ?? false,
-                synced_at: new Date(),
-              },
-            });
-            count++;
-            return;
-          }
+        for (const cust of knownCustomers) {
+          await prisma.pelanggan.update({
+            where: { id_pelanggan: cust.customerNo },
+            data: {
+              nama: cust.name,
+              non_aktif: cust.suspended ?? false,
+              synced_at: new Date(),
+            },
+          });
+          count++;
+        }
 
+        await throttledMap(newCustomers, async (cust) => {
           let detail: any = null;
           try {
             const detailRes = await axiosGetWithRetry(`${host}/accurate/api/customer/detail.do`, {
