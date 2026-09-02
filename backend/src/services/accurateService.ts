@@ -1491,6 +1491,7 @@ export class AccurateService {
           maxRedirects: 5,
         });
         const detailItems: any[] = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
+        logger.info(`[DIAG backfill rincian] nomor=${inv.nomor} found.id=${found.id} detailItems.length=${detailItems.length} keys=${Object.keys(detailRes.data?.d || {}).join(',')}`);
         const masterSalesmanId = detailRes.data?.d?.masterSalesmanId ?? null;
         const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
