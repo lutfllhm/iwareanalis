@@ -1443,7 +1443,17 @@ export class AccurateService {
    * karena invoice dalam SCHEDULED_SYNC_LOOKBACK_DAYS hari terakhir sudah
    * otomatis dapat detail lengkap lewat pullFakturPenjualan reguler tiap
    * siklus cron.
+   *
+   * Invoice sebelum RINCIAN_BACKFILL_MIN_DATE dilewati permanen: dicek di
+   * Accurate langsung, invoice 2019 memang tidak lagi punya baris detail
+   * (field "detailItem" selalu kosong walau header invoice lengkap) — bukan
+   * bug di sisi kita, datanya sendiri sudah tidak tersedia/diarsipkan oleh
+   * Accurate. Tanpa batas ini, backfill akan mengulang mencoba invoice yang
+   * sama tanpa hasil selamanya karena selalu diprioritaskan (tanggal paling
+   * lama, tapi rincian tidak akan pernah terisi).
    */
+  private static readonly RINCIAN_BACKFILL_MIN_DATE = new Date('2020-01-01T00:00:00Z');
+
   static async backfillInvoiceDetails(): Promise<{ done: boolean; processed: number }> {
     const host = await this.getSetting('ACCURATE_SESSION_HOST');
     if (!host) {
@@ -1453,7 +1463,7 @@ export class AccurateService {
     const headers = await this.getApiTokenHeaders();
 
     const pending = await prisma.fakturPenjualan.findMany({
-      where: { rincian: { none: {} } },
+      where: { rincian: { none: {} }, tanggal: { gte: this.RINCIAN_BACKFILL_MIN_DATE } },
       orderBy: { tanggal: 'asc' },
       take: this.INVOICE_DETAIL_BACKFILL_BATCH_SIZE,
       select: { nomor: true },
@@ -1491,7 +1501,6 @@ export class AccurateService {
           maxRedirects: 5,
         });
         const detailItems: any[] = detailRes.data?.d?.detailItem || detailRes.data?.d?.detailList || [];
-        logger.info(`[DIAG backfill rincian] nomor=${inv.nomor} found.id=${found.id} detailItems.length=${detailItems.length} keys=${Object.keys(detailRes.data?.d || {}).join(',')}`);
         const masterSalesmanId = detailRes.data?.d?.masterSalesmanId ?? null;
         const { salesId, salesName } = await resolveSalesman(host, headers, masterSalesmanId);
 
