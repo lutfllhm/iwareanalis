@@ -174,16 +174,20 @@ export async function startSyncScheduler(): Promise<void> {
       await executeAllSyncs();
     });
 
-    // Backfill historis pakai cron TETAP tiap 2 menit, terlepas dari
+    // Backfill historis pakai cron TETAP tiap 1 menit, terlepas dari
     // SYNC_INTERVAL_CRON — sengaja lebih sering daripada sync reguler supaya
     // dapat banyak kesempatan "slot kosong" untuk jalan (lihat lock bersama
     // di executeBackfill), bukan menunggu giliran panjang di ekor sync 5-modul.
-    backfillJob = cron.schedule('0 */2 * * * *', async () => {
+    // Tiap siklus backfillInvoiceDetails hanya makan puluhan detik (lihat
+    // INVOICE_DETAIL_BACKFILL_BATCH_SIZE), jadi interval 2 menit sebelumnya
+    // banyak nganggur — dipercepat ke 1 menit supaya backlog historis
+    // (~700rb invoice) beres lebih cepat.
+    backfillJob = cron.schedule('0 * * * * *', async () => {
       await executeBackfill();
     });
 
     logger.info(`Automated sync scheduler successfully started with cron pattern: "${cronExpression}"`);
-    logger.info('Automated historical backfill scheduler successfully started with cron pattern: "0 */2 * * * *"');
+    logger.info('Automated historical backfill scheduler successfully started with cron pattern: "0 * * * * *"');
   } catch (error) {
     logger.error('Failed to initialize sync scheduler:', error);
   }

@@ -1419,10 +1419,13 @@ export class AccurateService {
   // sales pada faktur historis. Ini paling berat per baris (1 panggilan
   // sales-invoice/detail.do PER invoice, plus resolve salesman) — jauh lebih
   // lambat daripada backfill invoice ringkas (list.do saja). throttledMap
-  // sudah membatasi concurrency + jeda antar panggilan; batas jumlah invoice
-  // per siklus di sini murni supaya 1 siklus tetap selesai di bawah interval
-  // cron 5 menit.
-  private static readonly INVOICE_DETAIL_BACKFILL_BATCH_SIZE = 40;
+  // sudah membatasi concurrency + jeda antar panggilan (2 worker x ~500ms-1s
+  // per invoice), jadi batch 40 hanya makan ~20-40 detik dari interval cron
+  // 2 menit — sisanya nganggur percuma padahal backlog (~700rb invoice
+  // historis) butuh berminggu-minggu pada laju itu. Dinaikkan ke 150 (masih
+  // selesai jauh di bawah interval cron 1 menit yang baru) supaya siklus
+  // tidak idle dan backlog beres lebih cepat.
+  private static readonly INVOICE_DETAIL_BACKFILL_BATCH_SIZE = 150;
 
   /**
    * Melengkapi rincian barang (tabel rincian_penjualan_barang) dan nama
