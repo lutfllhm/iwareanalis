@@ -1429,7 +1429,13 @@ export class AccurateService {
   // dibatasi ke 2 worker (lihat komentarnya di atas): Accurate sensitif
   // terhadap volume request per siklus, bukan cuma concurrency sesaat.
   // Dikembalikan ke 40 karena ini nilai yang sudah terbukti tidak memicu 429.
-  private static readonly INVOICE_DETAIL_BACKFILL_BATCH_SIZE = 40;
+  //
+  // Backlog historis (2021-2025) masih >700rb invoice pada laju 40/menit,
+  // butuh berminggu-minggu. Dicoba naikkan bertahap ke 60 (masih jauh di
+  // bawah 150 yang gagal) untuk sedikit mempercepat tanpa mengulang insiden
+  // 429 — pantau log "Backfill rincian invoice gagal" setelah perubahan ini;
+  // turunkan lagi ke 40 kalau muncul lagi.
+  private static readonly INVOICE_DETAIL_BACKFILL_BATCH_SIZE = 60;
 
   /**
    * Melengkapi rincian barang (tabel rincian_penjualan_barang) dan nama
