@@ -119,8 +119,8 @@ nano .env
 | **`ACCURATE_MOCK`** | Flag untuk memicu mock data / API real. | Set ke `false` untuk production. |
 | **`ACCURATE_CLIENT_ID`** | Client ID Aplikasi Accurate Anda. | Dapatkan dari panel Accurate Developer. |
 | **`ACCURATE_CLIENT_SECRET`**| Client Secret Aplikasi Accurate Anda. | Dapatkan dari panel Accurate Developer. |
-| **`ACCURATE_REDIRECT_URI`** | URI callback setelah otentikasi OAuth2. | Harus berupa HTTPS (contoh: `https://analys.iwareid.com/settings`) |
-| **`NEXT_PUBLIC_API_URL`** | Endpoint API backend yang diakses frontend. | Harus mengarah ke HTTPS (contoh: `https://analys.iwareid.com/api`) |
+| **`ACCURATE_REDIRECT_URI`** | URI callback setelah otentikasi OAuth2. | Harus berupa HTTPS (contoh: `https://analys.iware.tech/settings`) |
+| **`NEXT_PUBLIC_API_URL`** | Endpoint API backend yang diakses frontend. | Harus mengarah ke HTTPS (contoh: `https://analys.iware.tech/api`) |
 
 ### Cara Generate Key Secara Aman via Terminal:
 *   Untuk **`JWT_ACCESS_SECRET`** & **`JWT_REFRESH_SECRET`**:
@@ -154,23 +154,23 @@ Aplikasi Next.js (`port 3010`) dan Express API (`port 5010`) akan di-proxy oleh 
    ```
 
 4. **Buat Sertifikat SSL Dummy (Self-Signed) Sementara**:
-   Karena file `nginx.conf` sudah merujuk ke jalur SSL Let's Encrypt (`/etc/letsencrypt/live/analys.iwareid.com/...`), Nginx akan memicu error **BIO_new_file() failed** jika berkas tersebut belum ada. Kita buat sertifikat dummy sementara agar Nginx bisa menyala:
+   Karena file `nginx.conf` sudah merujuk ke jalur SSL Let's Encrypt (`/etc/letsencrypt/live/analys.iware.tech/...`), Nginx akan memicu error **BIO_new_file() failed** jika berkas tersebut belum ada. Kita buat sertifikat dummy sementara agar Nginx bisa menyala:
    ```bash
    # 1. Buat folder sertifikat (ganti dengan domain Anda jika berbeda)
-   sudo mkdir -p /etc/letsencrypt/live/analys.iwareid.com
+   sudo mkdir -p /etc/letsencrypt/live/analys.iware.tech
 
    # 2. Buat sertifikat dummy self-signed
    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-     -keyout /etc/letsencrypt/live/analys.iwareid.com/privkey.pem \
-     -out /etc/letsencrypt/live/analys.iwareid.com/fullchain.pem \
-     -subj "/CN=analys.iwareid.com"
+     -keyout /etc/letsencrypt/live/analys.iware.tech/privkey.pem \
+     -out /etc/letsencrypt/live/analys.iware.tech/fullchain.pem \
+     -subj "/CN=analys.iware.tech"
    ```
 
 5. Buka file konfigurasi tersebut untuk memverifikasi domain:
    ```bash
    sudo nano /etc/nginx/sites-available/dataanalis
    ```
-   *Pastikan nilai variabel `server_name` sudah diubah ke domain Anda (misal: `analys.iwareid.com`).*
+   *Pastikan nilai variabel `server_name` sudah diubah ke domain Anda (misal: `analys.iware.tech`).*
 
 6. Uji konfigurasi Nginx untuk memastikan tidak ada error syntax:
    ```bash
@@ -186,7 +186,7 @@ Aplikasi Next.js (`port 3010`) dan Express API (`port 5010`) akan di-proxy oleh 
 8. **Instalasi Sertifikat SSL Resmi (Let's Encrypt)**:
    Jalankan Certbot untuk menimpa sertifikat dummy tadi dengan sertifikat resmi Let's Encrypt secara otomatis:
    ```bash
-   sudo certbot --nginx -d analys.iwareid.com --force-renewal
+   sudo certbot --nginx -d analys.iware.tech --force-renewal
    ```
    *(Pilih opsi untuk mengalihkan/redirect HTTP ke HTTPS jika ditanyakan oleh Certbot)*
 
@@ -325,7 +325,7 @@ Error ini terjadi karena Let's Encrypt tidak bisa memverifikasi domain Anda kare
     1. Masuk ke DNS Manager domain Anda (Cloudflare, registrar domain, dll).
     2. Tambahkan **A Record** baru dengan name `analys` dan targetkan ke IP Publik VPS Anda.
     3. Tunggu sekitar 5-15 menit agar DNS menyebar.
-    4. Setelah DNS aktif, jalankan ulang: `sudo certbot --nginx -d analys.iwareid.com --force-renewal`.
+    4. Setelah DNS aktif, jalankan ulang: `sudo certbot --nginx -d analys.iware.tech --force-renewal`.
     5. Selama menunggu DNS aktif, Anda tetap bisa melanjutkan deployment Docker. Browser hanya akan menampilkan peringatan keamanan (karena menggunakan SSL Dummy), klik **Advanced** -> **Proceed to website** untuk melewatinya sementara.
 
 ### Masalah: Kontainer Tidak Mau Menyala (Exit Status 1)

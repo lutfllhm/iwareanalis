@@ -4,8 +4,8 @@
 
 Deployment aplikasi DataAnalis ke VPS telah berhasil dilakukan pada:
 - **Tanggal**: 18 Juni 2026
-- **Server**: 145.79.8.148 (srv1735747)
-- **Domain (Planned)**: analys.iwareid.com
+- **Server**: 148.230.97.47 (srv1735747)
+- **Domain (Planned)**: analys.iware.tech
 
 ---
 
@@ -45,7 +45,7 @@ Password: Jasadenam66secure
 
 **Backend Health Check:**
 ```bash
-curl http://145.79.8.148:5010/health
+curl http://148.230.97.47:5010/health
 # Response: {"status":"healthy","timestamp":"...","environment":"production","mockMode":false}
 ```
 
@@ -55,18 +55,18 @@ curl http://145.79.8.148:5010/health
 - ✅ ENCRYPTION_KEY (32 bytes hex untuk enkripsi OAuth token)
 - ✅ ACCURATE_CLIENT_ID: `1be820dc-c25a-43b7-8494-040830235d68`
 - ✅ ACCURATE_CLIENT_SECRET: `3eaaf3c9bc3b163dc5d52531cd86ebb7`
-- ✅ ACCURATE_REDIRECT_URI: `https://analys.iwareid.com/settings`
+- ✅ ACCURATE_REDIRECT_URI: `https://analys.iware.tech/settings`
 - ✅ ACCURATE_MOCK: `false` (menggunakan API real Accurate)
 
 ### ✅ 4. Frontend (Next.js 15)
 - [x] Frontend container berhasil di-build
 - [x] Next.js server berjalan di port 3010 (internal port 3000)
 - [x] Build production berhasil tanpa error
-- [x] NEXT_PUBLIC_API_URL terkonfigurasi ke: `https://analys.iwareid.com/api`
+- [x] NEXT_PUBLIC_API_URL terkonfigurasi ke: `https://analys.iware.tech/api`
 
 **Frontend Access:**
 ```bash
-curl http://145.79.8.148:3010
+curl http://148.230.97.47:3010
 # Response: HTML page dengan title "Accurate Online Data Analyst Dashboard"
 ```
 
@@ -106,7 +106,7 @@ sudo /usr/local/bin/backup-dataanalis.sh
 1. User klik "Connect to Accurate" di frontend settings page
 2. Frontend request auth URL dari backend: `GET /api/sync/connect`
 3. User diredirect ke Accurate Online untuk authorize
-4. Accurate redirect kembali ke: `https://analys.iwareid.com/settings?code=...`
+4. Accurate redirect kembali ke: `https://analys.iware.tech/settings?code=...`
 5. Frontend kirim code ke backend: `GET /api/sync/callback?code=...`
 6. Backend exchange code untuk access token & refresh token
 7. Token disimpan terenkripsi di database
@@ -120,39 +120,39 @@ Aplikasi sudah berjalan tapi hanya bisa diakses melalui IP:
 
 **Frontend:**
 ```
-http://145.79.8.148:3010
+http://148.230.97.47:3010
 ```
 
 **Backend API:**
 ```
-http://145.79.8.148:5010/api
+http://148.230.97.47:5010/api
 ```
 
 **Health Check:**
 ```
-http://145.79.8.148:5010/health
+http://148.230.97.47:5010/health
 ```
 
 ### Setelah DNS Setup (Recommended):
 
 1. **Setup DNS Record:**
-   - Masuk ke DNS manager domain `iwareid.com`
+   - Masuk ke DNS manager domain `iware.tech`
    - Tambahkan A Record:
      - Name: `analys`
      - Type: `A`
-     - Value: `145.79.8.148`
+     - Value: `148.230.97.47`
      - TTL: `3600` (1 hour)
 
 2. **Tunggu DNS Propagation (5-15 menit)**
 
 3. **Install SSL Certificate dari Let's Encrypt:**
    ```bash
-   sudo certbot --nginx -d analys.iwareid.com --force-renewal
+   sudo certbot --nginx -d analys.iware.tech --force-renewal
    ```
 
 4. **Akses Aplikasi:**
    ```
-   https://analys.iwareid.com
+   https://analys.iware.tech
    ```
 
 ---
@@ -320,7 +320,7 @@ docker compose up -d
 
 ### Immediate (Critical):
 1. ✅ ~~Deploy aplikasi~~ - **DONE**
-2. ⏳ **Setup DNS** untuk `analys.iwareid.com` → `145.79.8.148`
+2. ⏳ **Setup DNS** untuk `analys.iware.tech` → `148.230.97.47`
 3. ⏳ **Install SSL certificate** dari Let's Encrypt
 4. ⏳ **Login dan ganti password admin**
 5. ⏳ **Test OAuth flow** dengan Accurate Online

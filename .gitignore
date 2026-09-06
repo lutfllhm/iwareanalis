@@ -31,6 +31,11 @@ error.log
 *.db
 *.sqlite
 prisma/migrations/
+# Skema & migrasi resmi tetap dilacak (dump/backup tetap diabaikan)
+!database/schema.sql
+!database/migration_*.sql
+# Dump terkompresi hasil backup
+*.sql.gz
 
 # OS Files
 .DS_Store

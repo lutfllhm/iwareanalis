@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS `faktur_penjualan` (
   `tanggal` DATE NOT NULL,
   `total` DECIMAL(18, 4) NOT NULL,
   `pembayaran` DECIMAL(18, 4) NOT NULL,
+  `rincian_backfill_gagal` BOOLEAN NOT NULL DEFAULT FALSE,
+  `rincian_backfill_error` VARCHAR(255) NULL,
   `synced_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -143,6 +145,7 @@ CREATE TABLE IF NOT EXISTS `settings` (
 
 -- Indexes for search speed optimization
 CREATE INDEX idx_faktur_tanggal ON faktur_penjualan(tanggal);
+CREATE INDEX idx_faktur_backfill_gagal ON faktur_penjualan(rincian_backfill_gagal, tanggal);
 CREATE INDEX idx_rincian_tanggal ON rincian_penjualan_barang(tanggal);
 CREATE INDEX idx_retur_tanggal ON retur_penjualan(tanggal);
 

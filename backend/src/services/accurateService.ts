@@ -1469,7 +1469,11 @@ export class AccurateService {
     const headers = await this.getApiTokenHeaders();
 
     const pending = await prisma.fakturPenjualan.findMany({
-      where: { rincian: { none: {} }, tanggal: { gte: this.RINCIAN_BACKFILL_MIN_DATE } },
+      where: {
+        rincian: { none: {} },
+        tanggal: { gte: this.RINCIAN_BACKFILL_MIN_DATE },
+        rincian_backfill_gagal: false,
+      },
       orderBy: { tanggal: 'asc' },
       take: this.INVOICE_DETAIL_BACKFILL_BATCH_SIZE,
       select: { nomor: true },
@@ -1484,6 +1488,25 @@ export class AccurateService {
     // itu, yang tidak kita simpan. Alih-alih menyimpan id, cari ulang lewat
     // filter number EQUAL sebelum ambil detail (1 panggilan list.do murah
     // per invoice, lalu 1 panggilan detail.do).
+    let succeeded = 0;
+    let failedPermanent = 0;
+    let failedTransient = 0;
+
+    // Kegagalan permanen ditandai supaya invoice ini tidak diambil ulang tiap
+    // siklus. Kegagalan sementara (429, timeout, jaringan) TIDAK ditandai —
+    // invoice-nya sengaja dibiarkan untuk dicoba lagi nanti.
+    const markFailed = async (nomor: string, alasan: string): Promise<void> => {
+      failedPermanent++;
+      try {
+        await prisma.fakturPenjualan.update({
+          where: { nomor },
+          data: { rincian_backfill_gagal: true, rincian_backfill_error: alasan.slice(0, 255) },
+        });
+      } catch (markErr: any) {
+        logger.error(`Gagal menandai invoice nomor=${nomor} sebagai backfill-gagal: ${markErr.message}`);
+      }
+    };
+
     await throttledMap(pending, async (inv) => {
       try {
         const listRes = await axiosGetWithRetry(`${host}/accurate/api/sales-invoice/list.do`, {
@@ -1497,7 +1520,8 @@ export class AccurateService {
         });
         const found = listRes.data?.d?.[0];
         if (!found?.id) {
-          logger.warn(`Backfill rincian invoice: nomor=${inv.nomor} tidak ditemukan lagi di Accurate, dilewati.`);
+          logger.warn(`Backfill rincian invoice: nomor=${inv.nomor} tidak ditemukan lagi di Accurate, ditandai gagal permanen.`);
+          await markFailed(inv.nomor, 'Tidak ditemukan di Accurate');
           return;
         }
 
@@ -1553,12 +1577,47 @@ export class AccurateService {
             },
           });
         }
+
+        // Invoice tanpa satu pun baris detail di Accurate tidak akan pernah
+        // punya rincian — tandai, kalau tidak ia terus muncul di `pending`.
+        if (detailItems.length === 0) {
+          logger.warn(`Backfill rincian invoice: nomor=${inv.nomor} tidak punya detailItem di Accurate, ditandai gagal permanen.`);
+          await markFailed(inv.nomor, 'Tidak ada detailItem di Accurate');
+          return;
+        }
+
+        succeeded++;
       } catch (err: any) {
-        logger.error(`Backfill rincian invoice gagal untuk nomor=${inv.nomor}: ${err.message}`);
+        const status = err?.response?.status;
+        // 429/5xx/jaringan = gangguan sementara, invoice layak dicoba lagi.
+        const transient = !status || status === 429 || status >= 500;
+        logger.error(
+          `Backfill rincian invoice gagal untuk nomor=${inv.nomor} (${transient ? 'sementara' : 'permanen'}): ${err.message}`
+        );
+        if (transient) {
+          failedTransient++;
+        } else {
+          await markFailed(inv.nomor, `HTTP ${status}: ${err.message}`);
+        }
       }
     });
 
-    logger.info(`Backfill rincian invoice: ${pending.length} invoice diproses siklus ini.`);
-    return { done: false, processed: pending.length };
+    logger.info(
+      `Backfill rincian invoice: ${succeeded} berhasil, ${failedPermanent} gagal permanen (ditandai), ` +
+        `${failedTransient} gagal sementara (akan dicoba lagi) dari ${pending.length} invoice siklus ini.`
+    );
+
+    // Kalau SEMUA invoice batch ini gagal sementara, tidak ada kemajuan dan
+    // tidak ada yang ditandai — siklus berikutnya akan mengambil batch yang
+    // sama persis. Diberi peringatan supaya kondisi macet ini terlihat di log,
+    // bukan tersamar sebagai "N invoice diproses".
+    if (succeeded === 0 && failedPermanent === 0 && failedTransient > 0) {
+      logger.warn(
+        'Backfill rincian invoice tidak membuat kemajuan siklus ini (semua gagal sementara) — ' +
+          'kemungkinan rate limit Accurate; batch yang sama akan diulang.'
+      );
+    }
+
+    return { done: false, processed: succeeded };
   }
 }

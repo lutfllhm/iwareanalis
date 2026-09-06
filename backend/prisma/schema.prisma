@@ -58,6 +58,12 @@ model FakturPenjualan {
   tanggal                   DateTime  @db.Date
   total                     Decimal   @db.Decimal(18, 4)
   pembayaran                Decimal   @db.Decimal(18, 4)
+  // Ditandai saat backfill rincian gagal permanen untuk invoice ini (mis.
+  // nomornya sudah tidak ada lagi di Accurate). Tanpa penanda ini, query
+  // `pending` mengambil invoice yang sama tiap siklus dan backfill macet
+  // selamanya di batch terdepan.
+  rincian_backfill_gagal    Boolean   @default(false)
+  rincian_backfill_error    String?   @db.VarChar(255)
   synced_at                 DateTime  @default(now())
   created_at                DateTime  @default(now())
   updated_at                DateTime  @updatedAt
@@ -66,6 +72,7 @@ model FakturPenjualan {
   rincian   RincianPenjualanBarang[]
 
   @@index([id_pelanggan])
+  @@index([rincian_backfill_gagal, tanggal])
   @@map("faktur_penjualan")
 }
 

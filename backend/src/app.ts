@@ -19,14 +19,13 @@ app.use(helmet());
 app.use(
   cors({
     origin: [
-      'https://iwanalys.iwareid.com',
-      'http://iwanalys.iwareid.com',
+      'https://analys.iware.tech',
       'http://localhost:3010',
       'http://127.0.0.1:3010',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'http://145.79.8.148:3010',  // VPS IP frontend
-      'http://145.79.8.148:5010',  // VPS IP backend (for self-calls)
+      'http://148.230.97.47:3010',  // VPS IP frontend
+      'http://148.230.97.47:5010',  // VPS IP backend (for self-calls)
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
